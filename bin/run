@@ -1,0 +1,192 @@
+#!/bin/sh
+#
+# Run freesurfer-recon-all Gear
+# Built to flywheel-v0 spec.
+#
+# https://surfer.nmr.mgh.harvard.edu/fswiki/ReconAllOutputFiles
+
+GEAR=prfprepare
+REPO=dlinhardt
+CONTAINER="[${REPO}/$GEAR]"
+
+echo -e "$CONTAINER  Initiated"
+set -e
+###############################################################################
+# Utilities
+
+# Remove the spaces in directory and filenames recursively
+despacer () {
+  find "$1" -depth -name "* *" -execdir rename 's/ /_/g' "{}" \;
+}
+
+###############################################################################
+# Configure Freesurfer and MCR ENV
+
+export XAPPLRESDIR=/opt/mcr/v99/X11/app-defaults
+#export MCR_CACHE_FOLDER_NAME=/flywheel/v0/output/.mcrCache9.9
+
+export OS=Linux
+export FS_OVERRIDE=0
+export FIX_VERTEX_AREA=
+export FSF_OUTPUT_FORMAT=nii.gz
+export MNI_DIR=/opt/freesurfer/mni
+export LOCAL_DIR=/opt/freesurfer/local
+export FREESURFER_HOME=/opt/freesurfer
+export FSFAST_HOME=/opt/freesurfer/fsfast
+export MINC_BIN_DIR=/opt/freesurfer/mni/bin
+export MINC_LIB_DIR=/opt/freesurfer/mni/lib
+export MNI_DATAPATH=/opt/freesurfer/mni/data
+export FMRI_ANALYSIS_DIR=/opt/freesurfer/fsfast
+export PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
+export MNI_PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
+export XAPPLRESDIR=/opt/freesurfer/MCRv84/X11/app-defaults
+export PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin
+export PATH=$PATH:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+export PATH=$PATH:/sbin:/bin
+
+
+# activate anaconda 
+source /opt/conda/etc/profile.d/conda.sh
+
+###############################################################################
+# Initialize config parameters
+
+subject='  '
+etcorrection='  '
+neuropythy='  '
+rois='  '
+atlas='  '
+force='  '
+
+
+###############################################################################
+# Parse config options from CONFIG file or MANIFEST
+
+FLYWHEEL_BASE=/flywheel/v0
+
+function parse_config {
+  CONFIG_FILE=$FLYWHEEL_BASE/config.json
+  echo -e "$(cat $CONFIG_FILE | jq -r '.config.'$1)"
+}
+
+# String parsing
+config_subject="$(parse_config 'subject')"
+config_ETcorr="$(parse_config 'etcorrection')"
+config_NEUROPYTHY="$(parse_config 'neuropythy')"
+config_rois="$(parse_config 'rois')"
+config_atlas="$(parse_config 'atlas')"
+config_force="$(parse_config 'force')"
+
+
+###############################################################################
+# Configure paths
+
+OUTPUT_DIR=${FLYWHEEL_BASE}/output
+INPUT_DIR=${FLYWHEEL_BASE}/input
+BIDS_IN_DIR=${FLYWHEEL_BASE}/BIDS
+
+SUBJECT_ID=sub-$config_subject
+
+SUB_DIR=${INPUT_DIR}/fmriprep/$SUBJECT_ID
+#SES_DIR=${SUB_DIR}/ses-$config_session
+#FUNC_DIR=${SES_DIR}/func
+STIM_DIR=${INPUT_DIR}/stimuli
+
+PRE_FS_DIR=${INPUT_DIR}/freesurfer
+ETDATA_DIR=${INPUT_DIR}/etdata
+
+LICENSE_FILE=${OUTPUT_DIR}/.license
+BIDS_OUT_DIR=${OUTPUT_DIR}/BIDS
+SUB_OUT_DIR=${BIDS_OUT_DIR}/$SUBJECT_ID
+#SES_OUT_DIR=${SUB_OUT_DIR}/ses-$config_session
+#FUNC_OUT_DIR=${SES_OUT_DIR}/func
+
+STIM_OUT_DIR=${BIDS_OUT_DIR}/stimuli
+
+# check if anat dir is in subject or session folder019 — In order to check if a directory exists in Bash, you have to use the “-d” option
+if [[ -d ${SUB_DIR}/anat ]]; then
+	ANAT_DIR=${SUB_DIR}/anat
+else
+	SES_ANAT_DIR=$(ls -d ${SUB_DIR}/ses-*/anat)
+	if [[ -d ${SES_ANAT_DIR} ]]; then
+		ANAT_DIR=${SES_ANAT_DIR}/*/anat
+	else
+		echo "$CONTAINER  No input anatomy folders found in ${SUB_DIR} or ${SES_ANAT_DIR}! exiting... "
+   		exit 1
+	fi
+fi
+echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR}! continue... "
+#ANAT_DIR=${SES_DIR}/anat
+
+
+
+
+###############################################################################
+# start doing something
+###############################################################################
+# check if the freesurfer dir is present
+if [[ ! -d ${PRE_FS_DIR} ]]; then
+	echo "$CONTAINER  No freesurfer dir found in ${PRE_FS_DIR}! exiting... "
+	exit 2
+else
+	echo "$CONTAINER  Previous freesurfer dir found in ${PRE_FS_DIR}! continue... "
+fi
+
+conda activate neuropythy
+# Neuropythy retino-template algorithm
+if [[ ${config_NEUROPYTHY} == true ]]; then
+	if [[ ! -f ${PRE_FS_DIR}/${SUBJECT_ID}/surf/lh.benson14_varea.mgz ]]; then
+		echo "$CONTAINER  Starting Neuropythy retino-template ..."
+		# Matlab installation interfers with neuropythy execution.
+		
+		SAVE_LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+		export LD_LIBRARY_PATH=
+
+		cd $PRE_FS_DIR
+		python -m neuropythy atlas --verbose "${SUBJECT_ID}"
+		cd ~
+		export LD_LIBRARY_PATH=$SAVE_LD_LIBRARY_PATH
+		
+	else
+		echo "$CONTAINER  Neuropythy already done. continue..."
+	fi
+fi
+conda deactivate
+
+###############################################################################
+# convert the stimuli to nifti
+conda activate scientific
+cd $FLYWHEEL_BASE
+
+echo "$CONTAINER  Converting Stimuli to .nii.gz..."
+python stim_as_nii.py $config_subject $BIDS_IN_DIR --etcorr $config_ETcorr --force $config_force
+
+echo "$CONTAINER  Masking data with visual areas and save them to 2D nifti..."
+python nii_to_surfNii.py $config_subject $BIDS_IN_DIR --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
+# we could add some option for smoothing here
+
+echo "$CONTAINER  create events.tsv for the data containing the correct stimulus..."
+python link_stimuli.py $config_subject $BIDS_IN_DIR --areas $config_rois --etcorr $config_ETcorr --force $config_force
+
+cd ~
+conda deactivate
+
+
+
+###############################################################################
+# FINISH
+###############################################################################
+# Set permissions for outputs (prevent root only r/w)
+chmod -R 777 $OUTPUT_DIR
+echo -e "$CONTAINER  Done!"
+  
+# Get a list of the files in the output directory
+#outputs=$(find $OUTPUT_DIR/* -maxdepth 0 -type f -name "*.zip")
+
+# If outputs exist, generate metadata, and exit
+#if [[ -z $outputs ]]; then
+#  echo "$CONTAINER  GEAR FAILED... Exiting(1)"
+#  exit 1
+#else
+exit 0

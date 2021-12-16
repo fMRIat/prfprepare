@@ -1,0 +1,11 @@
+{
+	"config": {
+		"subject" : "002",
+		"etcorrection" : false,
+		"neuropythy"   : true,
+		"rois"    : "[V1,V2]",
+		"atlas"   : "benson",
+		"force"   : false
+
+	}
+}

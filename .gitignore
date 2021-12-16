@@ -1,0 +1,7 @@
+export/
+*DS_Store*
+*.swp
+local/
+docker.tar
+.nfs*
+*.sif
