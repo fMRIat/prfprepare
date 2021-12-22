@@ -104,6 +104,15 @@ SUB_OUT_DIR=${BIDS_OUT_DIR}/$SUBJECT_ID
 
 STIM_OUT_DIR=${BIDS_OUT_DIR}/stimuli
 
+
+# check if layout from fMRIPrep is legacy
+if [[ ! -d ${PRE_FS_DIR} ]]; then
+	echo "$CONTAINER  Pre-freesurfer not found at ${PRE_FS_DIR}!"
+	echo "If you run fMRIPrep>=21.0.0, please use '--output-layout legacy'"
+	echo "option to ensure the required input structure."
+	echo "(input/fmriprep/sub- and input/freesurfer/sub-)"
+fi
+
 # check if anat dir is in subject or session folder019 — In order to check if a directory exists in Bash, you have to use the “-d” option
 if [[ -d ${SUB_DIR}/anat ]]; then
 	ANAT_DIR=${SUB_DIR}/anat

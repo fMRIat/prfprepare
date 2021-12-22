@@ -62,25 +62,20 @@ for roi in rois:
     
         for task in tasks:
             
+            apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
+            stimName  = apertures[[f'task-{task[:3]}' in ap for ap in apertures]].item()
+            
             runs = layout.get(subject=sub, task=task, return_type='id', target='run')
             
             for run in runs:
                 
                 # create events.tsv without ET
-                if not etcorr:
-                    newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
-                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_events.tsv')
-                    niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
-                else:
-                    pass
-                    # newTSV = path.join(baseP, 'BIDS', f'sub-{sub}', f'ses-{ses}', 'func', 
-                    #                    f'sub-{sub}_ses-{ses}_task-{task}-surf-nocorr_events.tsv')
-                    # niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
+                newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
+                                   f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_events.tsv')
+                niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
                 
                 if not path.exists(newTSV) or force:
                     with open(newTSV, 'w') as file:
-                        apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
-                        stimName  = apertures[[f'task-{task[:3]}' in ap for ap in apertures]].item()
                         
                         nii = nib.load(stimName)
                         TR  = nii.header['pixdim'][4]
@@ -96,22 +91,24 @@ for roi in rois:
                 
                 # create events.tsv for ET corr
                 if etcorr:
-                    print('Eyetracker correction is unfortunately not implemented yet! coninue...')
-                    # newTSV = path.join(baseP, 'BIDS', f'sub-{sub}', f'ses-{ses}', 'func', f'sub-{sub}_ses-{ses}_task-{task}-surf-etcorr_events.tsv')
+                    newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
+                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-etcorr-{roi}_events.tsv')
+                    niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
                    
-                    # if not path.exists(newTSV) or force:
-                    #     with open(newTSV, 'w') as file:
-                    #         stimName = path.join(baseP, 'BIDS', 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
+                    stimNameET = path.join(outP, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
                             
-                    #         nii = nib.load(newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz'))
-                    #         TR = nii.header['pixdim'][4]
-                    #         nT = nii.shape[3]
+                    if not path.exists(newTSV) or force:
+                        with open(newTSV, 'w') as file:
                             
-                    #         # fill the events file
-                    #         file.writelines('onset\tduration\tstim_file\tstim_file_index\n')
+                            nii = nib.load(stimNameET)
+                            TR = nii.header['pixdim'][4]
+                            nT = nii.shape[3]
                             
-                    #         for i in range(nT):
-                    #             file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimName.split("/")[-1]}\t{i+1}\n')
+                            # fill the events file
+                            file.writelines('onset\tduration\tstim_file\tstim_file_index\n')
+                            
+                            for i in range(nT):
+                                file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimNameET.split("/")[-1]}\t{i+1}\n')
                 
     
 

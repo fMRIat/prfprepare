@@ -114,8 +114,7 @@ for roi in rois:
                     newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
                 else:
                     pass
-                    # newNiiP = path.join(baseP, 'BIDS', f'sub-{sub}', f'ses-{ses}', 
-                    #                     'func', f'sub-{sub}_ses-{ses}_task-{task}-surf-nocorr_run-{run}_desc-preproc_bold.nii.gz')
+                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
                     
                 if not path.exists(newNiiP) or force:
                     
@@ -133,7 +132,8 @@ for roi in rois:
                     
                     # create and save new nii img
                     apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
-                    stimNii = nib.load(apertures[[tasks[1][:3] in ap for ap in apertures]].item())
+                    stimNii = nib.load(apertures[[task[:3] in ap for ap in apertures]].item())
+                    
                     newNii = nib.Nifti2Image(vertices[:,None,None,:].astype('float64'), affine=np.eye(4))
                     newNii.header['pixdim']     = stimNii.header['pixdim']
                     newNii.header['qoffset_x']  = 1
@@ -143,8 +143,7 @@ for roi in rois:
                     newNii.header['xyzt_units'] = 10
                     nib.save(newNii, newNiiP)
                     
-                    if etcorr: 
-                        pass
-                        # nib.save(newNii, newNiiP.replace('-nocorr', '-etcorr'))
+                    if etcorr:
+                        nib.save(newNii, newNiiP.replace('-surf-', '-surf-etcorr-'))
                 
 
