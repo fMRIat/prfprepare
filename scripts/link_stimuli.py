@@ -92,7 +92,7 @@ for roi in rois:
                 # create events.tsv for ET corr
                 if etcorr:
                     newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
-                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-etcorr-{roi}_events.tsv')
+                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-etcorr-{roi}_run-{run}_events.tsv')
                     niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
                    
                     stimNameET = path.join(outP, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
