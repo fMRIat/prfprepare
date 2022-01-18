@@ -142,7 +142,7 @@ else
 	echo "$CONTAINER  Previous freesurfer dir found in ${PRE_FS_DIR}! continue... "
 fi
 
-conda activate neuropythy
+conda activate scientific
 # Neuropythy retino-template algorithm
 if [[ ${config_NEUROPYTHY} == true ]]; then
 	if [[ ! -f ${PRE_FS_DIR}/${SUBJECT_ID}/surf/lh.benson14_varea.mgz ]]; then

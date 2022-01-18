@@ -63,11 +63,8 @@ RUN apt-get update && apt-get install -y \
 FROM continuumio/miniconda3:latest
 
 RUN conda update -n base -c defaults conda
-
-COPY conda_config/neuropythy.yml .
-RUN conda env create -f neuropythy.yml
  
-# install other conda env
+# install conda env
 COPY conda_config/scientific.yml .
 RUN conda env create -f scientific.yml
  
