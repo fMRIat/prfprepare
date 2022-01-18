@@ -20,10 +20,10 @@ def str2bool(v):
 # parser
 parser = argparse.ArgumentParser(description='parser for script converting mrVista stimulus files to nii')
 
-parser.add_argument('sub',               type=str, help='subject name')
-parser.add_argument('bids_in_dir',       type=str, help='input directory before fmriprep for BIDS layout')
-parser.add_argument('--etcorr', type=str, help='perform an eyetracker correction [default: False]', default='False')
-parser.add_argument('--force',  type=str, help='force a new run [default: False]', default='False')
+parser.add_argument('sub',         type=str, help='subject name')
+parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
+parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
 
 args = parser.parse_args()
 
@@ -91,7 +91,7 @@ if etcorr:
             
             origStimF = stims[[task[:3] in ap for ap in stimsBase]].item()
             
-            runs = layout.get(subject=sub, task=task, return_type='id', target='run')
+            runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             
             for runI,run in enumerate(runs):
             
@@ -119,18 +119,18 @@ if etcorr:
                     # load the jitter file
                     gaze = loadmat(gazeFile, simplify_cells=True)
                     
-                    # get rid of out of image data
-                    gaze['x'][np.any((gaze['x']==0, gaze['x']==1280),0)] = 1280/2
-                    gaze['y'][np.any((gaze['y']==0, gaze['y']==1024),0)] = 1024/2
+                    # get rid of out of image data (loss of tracking)
+                    gaze['x'][np.any((gaze['x']==0, gaze['x']==1280),0)] = 1280/2 # 1280 comes from resolution of screen
+                    gaze['y'][np.any((gaze['y']==0, gaze['y']==1024),0)] = 1024/2 # 1024 comes from resolution of screen
                     
                     # resamplet to TR
                     x = np.array([np.mean(f) for f in np.array_split(gaze['x'], oStimVid.shape[2])])
                     y = np.array([np.mean(f) for f in np.array_split(gaze['y'], oStimVid.shape[2])])
                     
                     
-                    # demean the ET data, get rid of outliers (loss of fixation)
-                    x -= x.mean() # 1280 comes from resolution of screen
-                    y -= y.mean() # 1024 comes from resolution of screen
+                    # demean the ET data
+                    x -= x.mean()
+                    y -= y.mean()
                     y = -y # there is a flip between ET and fixation dot sequece (pixel coordinates), 
                              # with this the ET data is in the same space as fixation dot seq.
                     
@@ -139,7 +139,7 @@ if etcorr:
                     #       place the original stim in the center before shifting it so that
                     #       more peripheral regions could also be stimulated.
                     #       for the analysis the new width (zB 8° radius)
-                    # border = 33 for +1° radius
+                    # border = 33 for +1° radius?
                     # shiftStim = np.zeros((oStimVid.shape[0]+2*border,oStimVid.shape[1]+2*border,oStimVid.shape[2]))
                     
                     # shift the stimulus opposite of gaze direction

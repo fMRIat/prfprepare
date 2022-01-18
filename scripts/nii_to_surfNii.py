@@ -25,10 +25,10 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
-parser.add_argument('--etcorr', type=str, help='perform an eyetracker correction [default: False]', default='False')
-parser.add_argument('--atlas',  type=str, help='which atlas to use for the region comparison [default: benson]', default='benson')
-parser.add_argument('--areas',  type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
-parser.add_argument('--force',  type=str, help='force a new run [default: False]', default='False')
+parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
+parser.add_argument('--atlas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='benson')
+parser.add_argument('--areas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
+parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
 
 args = parser.parse_args()
 
