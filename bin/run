@@ -53,6 +53,7 @@ source /opt/conda/etc/profile.d/conda.sh
 # Initialize config parameters
 
 subject='  '
+tr='  '
 etcorrection='  '
 neuropythy='  '
 rois='  '
@@ -72,6 +73,7 @@ function parse_config {
 
 # String parsing
 config_subject="$(parse_config 'subject')"
+config_tr="$(parse_config 'tr')"
 config_ETcorr="$(parse_config 'etcorrection')"
 config_NEUROPYTHY="$(parse_config 'neuropythy')"
 config_rois="$(parse_config 'rois')"
@@ -169,7 +171,7 @@ conda activate scientific
 cd $FLYWHEEL_BASE
 
 echo "$CONTAINER  Converting Stimuli to .nii.gz..."
-python stim_as_nii.py $config_subject $BIDS_IN_DIR --etcorr $config_ETcorr --force $config_force
+python stim_as_nii.py $config_subject $BIDS_IN_DIR $config_tr --etcorr $config_ETcorr --force $config_force
 
 echo "$CONTAINER  Masking data with visual areas and save them to 2D nifti..."
 python nii_to_surfNii.py $config_subject $BIDS_IN_DIR --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force

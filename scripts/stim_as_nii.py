@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('TR',          type=float, help='Repetition Time in s')
 parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
 parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
 
@@ -49,8 +50,8 @@ else:
     
 
 #%% convert stimulus from matlab to nii.gz if not done yet
-stims = np.array(glob(path.join(args.bids_in_dir, 'stimuli', '*.mat')))
-stimsBase = np.array([stims[i].split('task-')[-1].split('_presentation.mat')[0] for i in range(len(stims))])
+stims = np.array(glob(path.join(args.bids_in_dir, 'stimuli', '*_stimulus.mat')))
+stimsBase = np.array([stims[i].split('task-')[-1].split('_stimulus.mat')[0] for i in range(len(stims))])
 
 for stimI,stim in enumerate(stimsBase):
     makedirs(path.join(outP, 'stimuli'), exist_ok=True)
@@ -59,6 +60,9 @@ for stimI,stim in enumerate(stimsBase):
     if not path.exists(oFname) or force:
         # load stimulus from mrVista stimulation file
         origStimF = stims[stimI]
+        
+        if not path.exists(origStimF): 
+            exit(f'Did not find stim File: {origStimF}')
                     
         origStim = loadmat(origStimF, simplify_cells=True)
         stimSeq  = origStim['stimulus']['seq']
@@ -67,10 +71,10 @@ for stimI,stim in enumerate(stimsBase):
         stimImagesU, stimImagesUC = np.unique(oImages, return_counts=True)
         oImages[oImages!=stimImagesU[np.argmax(stimImagesUC)]] = 1
         oImages[oImages==stimImagesU[np.argmax(stimImagesUC)]] = 0
-        oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*origStim['params']['tr'])]-1] # 8Hz flickering * 2s TR
+        oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*args.TR)]-1] # 8Hz flickering * 2s TR
                     
         img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
-        img.header['pixdim'][1:5] = [1,1,1,2]
+        img.header['pixdim'][1:5] = [1,1,1,args.TR]
         img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
         img.header['cal_max'] = 1
         img.header['xyzt_units'] = 10
@@ -89,7 +93,15 @@ if etcorr:
         
         for taskI,task in enumerate(tasks):
             
-            origStimF = stims[[task[:3] in ap for ap in stimsBase]].item()
+            try:
+                origStimF = stims[[task[:3] in ap for ap in stimsBase]].item()
+            except:
+                print(f'No eyetracker correction for sub-{sub}_ses-{ses}_task-{task} possible')
+                continue
+            
+            if not path.exists(origStimF): 
+                print(f'Did not find stim File: {origStimF}')
+                continue
             
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             
@@ -102,7 +114,8 @@ if etcorr:
                 if not path.exists(gazeFile):
                     print(f'No gaze file is found at {gazeFile}!')
                     print( 'Therefore, we skip eyetracker correction...')
-                    exit(7)
+                    print(7)
+                    continue
                 
                 if not path.exists(oFname) or force:
                         
@@ -114,7 +127,7 @@ if etcorr:
                     stimImagesU, stimImagesUC = np.unique(oImages, return_counts=True)
                     oImages[oImages!=stimImagesU[np.argmax(stimImagesUC)]] = 1
                     oImages[oImages==stimImagesU[np.argmax(stimImagesUC)]] = 0
-                    oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*origStim['params']['tr'])]-1] # 8Hz flickering * 2s TR
+                    oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*args.TR)]-1] # 8Hz flickering * 2s TR
                     
                     # load the jitter file
                     gaze = loadmat(gazeFile, simplify_cells=True)

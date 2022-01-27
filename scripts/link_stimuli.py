@@ -63,7 +63,11 @@ for roi in rois:
         for task in tasks:
             
             apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
-            stimName  = apertures[[f'task-{task[:3]}' in ap for ap in apertures]].item()
+            try:
+                stimName  = apertures[[f'task-{task[:3]}' in ap for ap in apertures]].item()
+            except:
+                continue
+            
             
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             

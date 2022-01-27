@@ -1,7 +1,7 @@
 #!/bin/bash
 # docker build --no-cache --tag scitran/freesurfer-recon-all `pwd`
-ME=dlinhardt
+ME=davidlinhardt
 GEAR=prfprepare
-VERSION=0.0.1
+VERSION=latest
 docker build --tag $ME/$GEAR:$VERSION .
 
