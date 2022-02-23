@@ -32,7 +32,6 @@ etcorr = str2bool(args.etcorr)
 force  = str2bool(args.force)
 
 # base paths
-inP  = '/flywheel/v0/input'
 outP = '/flywheel/v0/output/BIDS'
 
 # create the output folders

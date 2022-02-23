@@ -79,6 +79,7 @@ config_NEUROPYTHY="$(parse_config 'neuropythy')"
 config_rois="$(parse_config 'rois')"
 config_atlas="$(parse_config 'atlas')"
 config_force="$(parse_config 'force')"
+config_layout_legacy="$(parse_config 'fmriprep_layout_legacy')"
 
 
 ###############################################################################
@@ -90,32 +91,19 @@ BIDS_IN_DIR=${FLYWHEEL_BASE}/BIDS
 
 SUBJECT_ID=sub-$config_subject
 
-SUB_DIR=${INPUT_DIR}/fmriprep/$SUBJECT_ID
-#SES_DIR=${SUB_DIR}/ses-$config_session
-#FUNC_DIR=${SES_DIR}/func
-STIM_DIR=${INPUT_DIR}/stimuli
-
-PRE_FS_DIR=${INPUT_DIR}/freesurfer
-ETDATA_DIR=${INPUT_DIR}/etdata
-
-LICENSE_FILE=${OUTPUT_DIR}/.license
-BIDS_OUT_DIR=${OUTPUT_DIR}/BIDS
-SUB_OUT_DIR=${BIDS_OUT_DIR}/$SUBJECT_ID
-#SES_OUT_DIR=${SUB_OUT_DIR}/ses-$config_session
-#FUNC_OUT_DIR=${SES_OUT_DIR}/func
-
-STIM_OUT_DIR=${BIDS_OUT_DIR}/stimuli
-
-
-# check if layout from fMRIPrep is legacy
-if [[ ! -d ${PRE_FS_DIR} ]]; then
-	echo "$CONTAINER  Pre-freesurfer not found at ${PRE_FS_DIR}!"
-	echo "If you run fMRIPrep>=21.0.0, please use '--output-layout legacy'"
-	echo "option to ensure the required input structure."
-	echo "(input/fmriprep/sub- and input/freesurfer/sub-)"
+if [[ ${config_layout_legacy} == true ]]; then
+	SUB_DIR=${INPUT_DIR}/fmriprep/$SUBJECT_ID
+	PRE_FS_DIR=${INPUT_DIR}/freesurfer
+else
+	SUB_DIR=${INPUT_DIR}/$SUBJECT_ID
+	PRE_FS_DIR=${INPUT_DIR}/sourcedata/freesurfer
 fi
 
-# check if anat dir is in subject or session folder019 — In order to check if a directory exists in Bash, you have to use the “-d” option
+BIDS_OUT_DIR=${OUTPUT_DIR}/BIDS
+SUB_OUT_DIR=${BIDS_OUT_DIR}/$SUBJECT_ID
+
+
+# check if anat dir is in subject or session folder
 if [[ -d ${SUB_DIR}/anat ]]; then
 	ANAT_DIR=${SUB_DIR}/anat
 else
@@ -123,11 +111,11 @@ else
 	if [[ -d ${SES_ANAT_DIR} ]]; then
 		ANAT_DIR=${SES_ANAT_DIR}/*/anat
 	else
-		echo "$CONTAINER  No input anatomy folders found in ${SUB_DIR} or ${SES_ANAT_DIR}! exiting... "
+		echo "$CONTAINER  No input anatomy folders found in ${SUB_DIR} or ${SES_ANAT_DIR} exiting... "
    		exit 1
 	fi
 fi
-echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR}! continue... "
+echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR} continue... "
 #ANAT_DIR=${SES_DIR}/anat
 
 
@@ -138,10 +126,10 @@ echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR}! continue... "
 ###############################################################################
 # check if the freesurfer dir is present
 if [[ ! -d ${PRE_FS_DIR} ]]; then
-	echo "$CONTAINER  No freesurfer dir found in ${PRE_FS_DIR}! exiting... "
+	echo "$CONTAINER  No freesurfer dir found in ${PRE_FS_DIR} exiting... "
 	exit 2
 else
-	echo "$CONTAINER  Previous freesurfer dir found in ${PRE_FS_DIR}! continue... "
+	echo "$CONTAINER  Previous freesurfer dir found in ${PRE_FS_DIR} continue... "
 fi
 
 conda activate scientific
@@ -174,7 +162,7 @@ echo "$CONTAINER  Converting Stimuli to .nii.gz..."
 python stim_as_nii.py $config_subject $BIDS_IN_DIR $config_tr --etcorr $config_ETcorr --force $config_force
 
 echo "$CONTAINER  Masking data with visual areas and save them to 2D nifti..."
-python nii_to_surfNii.py $config_subject $BIDS_IN_DIR --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
+python nii_to_surfNii.py $config_subject $BIDS_IN_DIR $SUB_DIR $PRE_FS_DIR --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
 # we could add some option for smoothing here
 
 echo "$CONTAINER  create events.tsv for the data containing the correct stimulus..."

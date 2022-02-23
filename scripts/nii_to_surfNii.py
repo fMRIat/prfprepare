@@ -25,6 +25,8 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('subjectPath', type=str, help='input subject directory')
+parser.add_argument('freesurferPath', type=str, help='input freesurfer directory')
 parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
 parser.add_argument('--atlas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='benson')
 parser.add_argument('--areas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
@@ -36,7 +38,6 @@ etcorr = str2bool(args.etcorr)
 force  = str2bool(args.force)
 
 # base paths
-inP  = '/flywheel/v0/input'
 outP = '/flywheel/v0/output/BIDS'
 
 # get the bids layout fur given subject
@@ -55,8 +56,8 @@ rois = args.areas.split(']')[0].split('[')[-1].split(',')
 ###############################################################################
 # load in the atlas
 if args.atlas=='benson':
-    lh_areasP = path.join(inP, 'freesurfer', f'sub-{sub}', 'surf', 'lh.benson14_varea.mgz')
-    rh_areasP = path.join(inP, 'freesurfer', f'sub-{sub}', 'surf', 'rh.benson14_varea.mgz')
+    lh_areasP = path.join(args.freesurferPath, f'sub-{sub}', 'surf', 'lh.benson14_varea.mgz')
+    rh_areasP = path.join(args.freesurferPath, f'sub-{sub}', 'surf', 'rh.benson14_varea.mgz')
     if not path.exists(lh_areasP) or not path.exists(rh_areasP): exit(4)
     
     # load the label files
@@ -69,8 +70,8 @@ if args.atlas=='benson':
     areaLabels = { areaLabels[k]:k for k in areaLabels }
     
 elif args.atlas=='wang':
-    lh_areasP = path.join(inP, 'freesurfer', f'sub-{sub}', 'surf', 'lh.wang15_mplbl.mgz')
-    rh_areasP = path.join(inP, 'freesurfer', f'sub-{sub}', 'surf', 'rh.wang15_mplbl.mgz')
+    lh_areasP = path.join(args.freesurferPath, f'sub-{sub}', 'surf', 'lh.wang15_mplbl.mgz')
+    rh_areasP = path.join(args.freesurferPath, f'sub-{sub}', 'surf', 'rh.wang15_mplbl.mgz')
     if not path.exists(lh_areasP) or not path.exists(rh_areasP): exit(4)
     
     # load the label files
@@ -95,7 +96,7 @@ for roi in rois:
     sess = layout.get(subject=sub, return_type='id', target='session')  
     
     for sesI,ses in enumerate(sess):
-        funcInP  = path.join(inP,   'fmriprep', f'sub-{sub}', f'ses-{ses}', 'func')
+        funcInP  = path.join(args.subjectPath, f'ses-{ses}', 'func')
         funcOutP = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func')
         makedirs(funcOutP, exist_ok=True)
                
