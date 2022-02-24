@@ -104,19 +104,18 @@ SUB_OUT_DIR=${BIDS_OUT_DIR}/$SUBJECT_ID
 
 
 # check if anat dir is in subject or session folder
-if [[ -d ${SUB_DIR}/anat ]]; then
-	ANAT_DIR=${SUB_DIR}/anat
-else
-	SES_ANAT_DIR=$(ls -d ${SUB_DIR}/ses-*/anat)
-	if [[ -d ${SES_ANAT_DIR} ]]; then
-		ANAT_DIR=${SES_ANAT_DIR}/*/anat
-	else
-		echo "$CONTAINER  No input anatomy folders found in ${SUB_DIR} or ${SES_ANAT_DIR} exiting... "
-   		exit 1
-	fi
-fi
-echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR} continue... "
-#ANAT_DIR=${SES_DIR}/anat
+#if [[ -d ${SUB_DIR}/anat ]]; then
+#	ANAT_DIR=${SUB_DIR}/anat
+#else
+#	SES_ANAT_DIR=$(ls -d ${SUB_DIR}/ses-*/anat)
+#	if [[ -d ${SES_ANAT_DIR} ]]; then
+#		ANAT_DIR=${SES_ANAT_DIR}/*/anat
+#	else
+#		echo "$CONTAINER  No input anatomy folders found in ${SUB_DIR} or ${SES_ANAT_DIR} exiting... "
+#  		exit 1
+#	fi
+#fi
+#echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR} continue... "
 
 
 
