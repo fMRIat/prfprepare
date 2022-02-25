@@ -79,7 +79,7 @@ config_NEUROPYTHY="$(parse_config 'neuropythy')"
 config_rois="$(parse_config 'rois')"
 config_atlas="$(parse_config 'atlas')"
 config_force="$(parse_config 'force')"
-config_layout_legacy="$(parse_config 'fmriprep_layout_legacy')"
+config_fmriprep_legacy="$(parse_config 'fmriprep_layout_legacy')"
 
 
 ###############################################################################
@@ -91,7 +91,7 @@ BIDS_IN_DIR=${FLYWHEEL_BASE}/BIDS
 
 SUBJECT_ID=sub-$config_subject
 
-if [[ ${config_layout_legacy} == true ]]; then
+if [[ ${config_fmriprep_legacy} == true ]]; then
 	SUB_DIR=${INPUT_DIR}/fmriprep/$SUBJECT_ID
 	PRE_FS_DIR=${INPUT_DIR}/freesurfer
 else
@@ -161,7 +161,7 @@ echo "$CONTAINER  Converting Stimuli to .nii.gz..."
 python stim_as_nii.py $config_subject $BIDS_IN_DIR $config_tr --etcorr $config_ETcorr --force $config_force
 
 echo "$CONTAINER  Masking data with visual areas and save them to 2D nifti..."
-python nii_to_surfNii.py $config_subject $BIDS_IN_DIR $SUB_DIR $PRE_FS_DIR --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
+python nii_to_surfNii.py $config_subject $BIDS_IN_DIR $SUB_DIR $PRE_FS_DIR --fmriprep_legacy $config_fmriprep_legacy --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
 # we could add some option for smoothing here
 
 echo "$CONTAINER  create events.tsv for the data containing the correct stimulus..."

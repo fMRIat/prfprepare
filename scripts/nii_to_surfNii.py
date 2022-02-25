@@ -26,7 +26,8 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
 parser.add_argument('subjectPath', type=str, help='input subject directory')
-parser.add_argument('freesurferPath', type=str, help='input freesurfer directory')
+parser.add_argument('freesurferPath',    type=str, help='input freesurfer directory')
+parser.add_argument('--fmriprep_legacy', type=str, help='if fMRIPrep output layout is legacy', default='True')
 parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
 parser.add_argument('--atlas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='benson')
 parser.add_argument('--areas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
@@ -120,8 +121,12 @@ for roi in rois:
                 if not path.exists(newNiiP) or force:
                     
                     # load the .gii in fsnative
-                    giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-L_bold.func.gii')
-                    giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-R_bold.func.gii')
+                    if args.fmriprep_legacy:
+                        giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-L_bold.func.gii')
+                        giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-R_bold.func.gii')
+                    else:
+                        giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_space-fsnative_bold.func.gii')
+                        giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_space-fsnative_bold.func.gii')
                     giiImgL = nib.load(giiPL).agg_data()
                     giiImgR = nib.load(giiPR).agg_data()
                     
