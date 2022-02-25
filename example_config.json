@@ -6,7 +6,7 @@
 		"neuropythy"   : true,
 		"rois"    : "[V1,V2]",
 		"atlas"   : "benson",
-		"force"   : false,
+		"force"   : true,
 		"fmriprep_layout_legacy" : false
 
 	}

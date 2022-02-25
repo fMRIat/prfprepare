@@ -1,5 +1,4 @@
 #!/bin/sh
-# base_path=/home_local/dlinhardt/prfprepare_test/data/
 
 export cmd="docker run -ti --rm $4 \
 	         -v $2/BIDS/derivatives/fmriprep:/flywheel/v0/input  \
