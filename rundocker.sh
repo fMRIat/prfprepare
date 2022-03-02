@@ -1,9 +1,12 @@
 #!/bin/sh
-base_path=/home_local/dlinhardt/prfprepare_test/data/
 
-docker run -ti --rm $1 \
-	-v $base_path/derivatives:/flywheel/v0/input  \
-	-v $base_path/derivatives:/flywheel/v0/output  \
-	-v $base_path/BIDS:/flywheel/v0/BIDS  \
-	-v $base_path/config/prfprepare.json:/flywheel/v0/config.json \
-	davidlinhardt/prfprepare:0.0.5
+export cmd="docker run -ti --rm $4 \
+	         -v $2/BIDS/derivatives/fmriprep:/flywheel/v0/input  \
+	         -v $2/BIDS/derivatives:/flywheel/v0/output  \
+	         -v $2/BIDS:/flywheel/v0/BIDS  \
+	         -v $2/$3:/flywheel/v0/config.json \
+	         davidlinhardt/prfprepare:$1 "
+echo "Launching the following command: "
+echo $cmd
+eval $cmd
+
