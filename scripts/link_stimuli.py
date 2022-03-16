@@ -25,6 +25,7 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('output_dir',  type=str, help='output subject directory')
 parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
 parser.add_argument('--areas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
 parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
@@ -35,7 +36,7 @@ etcorr = str2bool(args.etcorr)
 force  = str2bool(args.force)
 
 # base paths
-outP = '/flywheel/v0/output/BIDS'
+outP = args.output_dir
 
 # get the bids layout fur given subject
 layout = bids.BIDSLayout(args.bids_in_dir)
@@ -73,7 +74,7 @@ for roi in rois:
             for run in runs:
                 
                 # create events.tsv without ET
-                newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
+                newTSV = path.join(outP, f'ses-{ses}', 'func', 
                                    f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_events.tsv')
                 niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
                 
@@ -94,11 +95,13 @@ for roi in rois:
                 
                 # create events.tsv for ET corr
                 if etcorr:
-                    newTSV = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func', 
-                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-etcorr-{roi}_run-{run}_events.tsv')
+                    outPET = outP.replace('/sub-', '_ET/sub-')
+                    
+                    newTSV = path.join(outPET, f'ses-{ses}', 'func', 
+                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_events.tsv')
                     niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
                    
-                    stimNameET = path.join(outP, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
+                    stimNameET = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
                             
                     if not path.exists(newTSV) or force:
                         with open(newTSV, 'w') as file:

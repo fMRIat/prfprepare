@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('output_dir',  type=str, help='output subject directory')
 parser.add_argument('TR',          type=float, help='Repetition Time in s')
 parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
 parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
@@ -32,7 +33,7 @@ etcorr = str2bool(args.etcorr)
 force  = str2bool(args.force)
 
 # base paths
-outP = '/flywheel/v0/output/BIDS'
+outP = args.output_dir
 
 # create the output folders
 makedirs(outP, exist_ok=True)
@@ -84,6 +85,12 @@ for stimI,stim in enumerate(stimsBase):
 #%% do the shifting for ET corr
 if etcorr:    
     
+    # base paths
+    outPET = args.output_dir.replace('/sub-', '_ET/sub-')
+    
+    # create the output folders
+    makedirs(outPET, exist_ok=True)
+    
     sess = layout.get(subject=sub, return_type='id', target='session')
     
     for sesI,ses in enumerate(sess):
@@ -106,7 +113,8 @@ if etcorr:
             
             for runI,run in enumerate(runs):
             
-                oFname = path.join(outP, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
+                makedirs(path.join(outPET, 'stimuli'), exist_ok=True)
+                oFname = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
                 gazeFile = path.join(args.bids_in_dir, f'sub-{sub}', f'ses-{ses}', 'etdata', 
                                      f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_gaze.mat')
                 
