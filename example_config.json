@@ -1,5 +1,6 @@
 {
 	"config": {
+		"fmriprep_analysis": "01",
 		"subject" : "002",
 		"tr"      : 2,
 		"etcorrection" : true,

@@ -25,6 +25,7 @@ parser = argparse.ArgumentParser(description='parser for script converting mrVis
 
 parser.add_argument('sub',         type=str, help='subject name')
 parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
+parser.add_argument('output_dir',  type=str, help='output subject directory')
 parser.add_argument('subjectPath', type=str, help='input subject directory')
 parser.add_argument('freesurferPath',    type=str, help='input freesurfer directory')
 parser.add_argument('--fmriprep_legacy', type=str, help='if fMRIPrep output layout is legacy', default='False')
@@ -40,7 +41,7 @@ force  = str2bool(args.force)
 fmriprep_legacy  = str2bool(args.fmriprep_legacy)
 
 # base paths
-outP = '/flywheel/v0/output/BIDS'
+outP = args.output_dir
 
 # get the bids layout fur given subject
 layout = bids.BIDSLayout(args.bids_in_dir)
@@ -99,7 +100,7 @@ for roi in rois:
     
     for sesI,ses in enumerate(sess):
         funcInP  = path.join(args.subjectPath, f'ses-{ses}', 'func')
-        funcOutP = path.join(outP, f'sub-{sub}', f'ses-{ses}', 'func')
+        funcOutP = path.join(outP, f'ses-{ses}', 'func')
         makedirs(funcOutP, exist_ok=True)
                
         lh_mask = np.array([ l in roiLabels for l in lh_areas ])
@@ -113,21 +114,17 @@ for roi in rois:
             
             for run in runs:
                 
-                if not etcorr:
-                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
-                else:
-                    pass
-                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
-                    
+                newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
+
                 if not path.exists(newNiiP) or force:
                     
                     # load the .gii in fsnative
                     if fmriprep_legacy:
-                        print('Reading fmriprep legacy files, space then hemi')
+                        # print('Reading fmriprep legacy files, space then hemi')
                         giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-L_bold.func.gii')
                         giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-R_bold.func.gii')
                     else:
-                        print('Reading fmriprep NON-legacy files, hemi then space')
+                        # print('Reading fmriprep NON-legacy files, hemi then space')
                         giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_space-fsnative_bold.func.gii')
                         giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_space-fsnative_bold.func.gii')
                     giiImgL = nib.load(giiPL).agg_data()
@@ -153,6 +150,9 @@ for roi in rois:
                     nib.save(newNii, newNiiP)
                     
                     if etcorr:
-                        nib.save(newNii, newNiiP.replace('-surf-', '-surf-etcorr-'))
+                        funcOutPET = path.join(outP.replace('/sub-', '_ET/sub-'), f'ses-{ses}', 'func')
+                        makedirs(funcOutPET, exist_ok=True)
+                        newNiiPET = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
+                        nib.save(newNii, newNiiPET)
                 
 
