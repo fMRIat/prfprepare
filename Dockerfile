@@ -9,23 +9,6 @@
 #
 FROM ubuntu:xenial
 
-# Install dependencies for FreeSurfer
-#RUN apt-get update && apt-get -y install \
-#        bc \
-#        tar \
-#        zip \
-#        wget \
-#        gawk \
-#        tcsh \
-#        python \
-#        libgomp1 \
-#        python-pip \
-#        perl-modules 
-# Download Freesurfer dev from MGH and untar to /opt
-#RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.1.1/freesurfer-linux-centos6_x86_64-7.1.1.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
-
-
-
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0
 RUN mkdir -p ${FLYWHEEL}
@@ -58,9 +41,13 @@ RUN apt-get update && apt-get install -y \
     bsdtar 
 
 ############################
-# install conda env for neuropythy
+# Install miniconda
+ENV CONDA_DIR /opt/conda
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
+     /bin/bash ~/miniconda.sh -b -p /opt/conda
 
-FROM continuumio/miniconda3:latest
+# Put conda in path so we can use conda activate
+ENV PATH=$CONDA_DIR/bin:$PATH
 
 RUN conda update -n base -c defaults conda
  
@@ -70,7 +57,6 @@ RUN conda env create -f scientific.yml
  
 
 RUN apt-get update && apt-get install -y jq
-
 
 
 # Make directory for flywheel spec (v0)
