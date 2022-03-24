@@ -114,7 +114,7 @@ for roi in rois:
             
             for run in runs:
                 
-                newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
+                newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_desc-{roi}_bold.nii.gz')
 
                 if not path.exists(newNiiP) or force:
                     
@@ -152,7 +152,7 @@ for roi in rois:
                     if etcorr:
                         funcOutPET = path.join(outP.replace('/sub-', '_ET/sub-'), f'ses-{ses}', 'func')
                         makedirs(funcOutPET, exist_ok=True)
-                        newNiiPET = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_desc-preproc_bold.nii.gz')
+                        newNiiPET = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_desc-{roi}_bold.nii.gz')
                         nib.save(newNii, newNiiPET)
                 
 

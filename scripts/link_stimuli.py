@@ -75,8 +75,8 @@ for roi in rois:
                 
                 # create events.tsv without ET
                 newTSV = path.join(outP, f'ses-{ses}', 'func', 
-                                   f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_events.tsv')
-                niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
+                                   f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
+                niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}_bold.nii.gz')
                 
                 if not path.exists(newTSV) or force:
                     with open(newTSV, 'w') as file:
@@ -98,8 +98,8 @@ for roi in rois:
                     outPET = outP.replace('/sub-', '_ET/sub-')
                     
                     newTSV = path.join(outPET, f'ses-{ses}', 'func', 
-                                       f'sub-{sub}_ses-{ses}_task-{task}-surf-{roi}_run-{run}_events.tsv')
-                    niiPa = newTSV.replace('events.tsv', f'run-{run}_desc-preproc_bold.nii.gz')
+                                       f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
+                    niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}_bold.nii.gz')
                    
                     stimNameET = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
                             
