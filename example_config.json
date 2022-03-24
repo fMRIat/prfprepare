@@ -8,7 +8,7 @@
 		"rois"    : "[V1,V2]",
 		"atlas"   : "benson",
 		"force"   : true,
-		"fmriprep_layout_legacy" : false
+		"fmriprep_legacy_layout" : false
 
 	}
 }

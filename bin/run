@@ -80,7 +80,7 @@ config_NEUROPYTHY="$(parse_config 'neuropythy')"
 config_rois="$(parse_config 'rois')"
 config_atlas="$(parse_config 'atlas')"
 config_force="$(parse_config 'force')"
-config_fmriprep_legacy="$(parse_config 'fmriprep_layout_legacy')"
+config_fmriprep_legacy="$(parse_config 'fmriprep_legacy_layout')"
 
 
 ###############################################################################
