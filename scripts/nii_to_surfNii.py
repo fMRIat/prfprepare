@@ -150,9 +150,13 @@ for roi in rois:
                     nib.save(newNii, newNiiP)
                     
                     if etcorr:
-                        funcOutPET = path.join(outP.replace('/sub-', '_ET/sub-'), f'ses-{ses}', 'func')
-                        makedirs(funcOutPET, exist_ok=True)
-                        newNiiPET = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_desc-{roi}_bold.nii.gz')
-                        nib.save(newNii, newNiiPET)
+                        outPET = outP.replace('/sub-', '_ET/sub-')
+                        if path.isdir(outP):
+                            funcOutPET = path.join(outPET, f'ses-{ses}', 'func')
+                            makedirs(funcOutPET, exist_ok=True)
+                            newNiiPET = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_desc-{roi}_bold.nii.gz')
+                            nib.save(newNii, newNiiPET)
+                        else:
+                            print('No eyetracker analysis-XX folder found!')
                 
 

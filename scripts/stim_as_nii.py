@@ -121,7 +121,6 @@ if etcorr:
                 if not path.exists(gazeFile):
                     print(f'No gaze file is found at {gazeFile}!')
                     print( 'Therefore, we skip eyetracker correction...')
-                    print(7)
                     continue
                 
                 if not path.exists(oFname) or force:
