@@ -11,7 +11,6 @@ from os import path, makedirs
 import bids
 import numpy as np
 import neuropythy as ny
-import argparse
 from glob import glob
 from scipy.io import loadmat
 import sys
@@ -67,7 +66,12 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             areaLabels = {labelNames[k]:k for k in range(len(labelNames))}
             
             if rois[0] == 'all':
-                rois = labelNames[1:]
+                rois = 'fullBrain'
+                
+        elif atlas in ['none','fullBrain']:
+            labelNames = 'fullBrain'
+            areaLabels = {'fullBrain':-1}
+            rois = ['fullBrain']
             
         else:
             die('You specified a wrong atlas, please choose from [benson, wang]!')
@@ -78,14 +82,21 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                 continue
             # get labels associated with ROI
             roiLabels = [ value for key, value in areaLabels.items() if roi in key ]
+            
+            if roi == 'fullBrain':
+                roiAtlasStr = roi
+            else:
+                roiAtlasStr = f'{roi}-{atlas}'
+                
                                                 
             for sesI,ses in enumerate(sess):
                 funcInP  = path.join(subInDir, f'ses-{ses}', 'func')
                 funcOutP = path.join(outP, f'ses-{ses}', 'func')
                 makedirs(funcOutP, exist_ok=True)
-                       
-                lh_mask = np.array([ l in roiLabels for l in lh_areas ])
-                rh_mask = np.array([ l in roiLabels for l in rh_areas ])
+                
+                if not roi == 'fullBrain':
+                    lh_mask = np.array([ l in roiLabels for l in lh_areas ])
+                    rh_mask = np.array([ l in roiLabels for l in rh_areas ])
                 
                 tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')
                 
@@ -95,8 +106,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     
                     for run in runs:
                         
-                        newNiiPL = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_desc-{roi}-{atlas}_bold.nii.gz')
-                        newNiiPR = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_desc-{roi}-{atlas}_bold.nii.gz')
+                        newNiiPL = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_desc-{roiAtlasStr}_bold.nii.gz')
+                        newNiiPR = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_desc-{roiAtlasStr}_bold.nii.gz')
         
                         if not path.exists(newNiiPL) or not path.isfile(newNiiPR) or force:
                             
@@ -109,12 +120,13 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 # print('Reading fmriprep NON-legacy files, hemi then space')
                                 giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_space-fsnative_bold.func.gii')
                                 giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_space-fsnative_bold.func.gii')
-                            giiImgL = nib.load(giiPL).agg_data()
-                            giiImgR = nib.load(giiPR).agg_data()
+                            verticesL = nib.load(giiPL).agg_data()
+                            verticesR = nib.load(giiPR).agg_data()
                             
                             # apply V1 mask
-                            verticesL = giiImgL[lh_mask,:]
-                            verticesR = giiImgR[rh_mask,:]
+                            if not roi == 'fullBrain':
+                                verticesL = verticesL[lh_mask,:]
+                                verticesR = verticesR[rh_mask,:]
                             
                             # get rid of volumes before stimulus actually started
                             if forceParams:
@@ -163,8 +175,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 if path.isdir(outP):
                                     funcOutPET = path.join(outPET, f'ses-{ses}', 'func')
                                     makedirs(funcOutPET, exist_ok=True)
-                                    newNiiPETL = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_desc-{roi}_bold.nii.gz')
-                                    newNiiPETR = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_desc-{roi}_bold.nii.gz')
+                                    newNiiPETL = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_desc-{roiAtlasStr}_bold.nii.gz')
+                                    newNiiPETR = path.join(funcOutPET, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_desc-{roiAtlasStr}_bold.nii.gz')
                                     nib.save(newNiiL, newNiiPETL)
                                     nib.save(newNiiR, newNiiPETR)
                                 else:
