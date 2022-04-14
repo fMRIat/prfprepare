@@ -1,14 +1,13 @@
 {
+	"subject" : "001",
+	"rois"    : "[V1,V2]",
+	"atlases" : "[benson,wang]",
+	"etcorrection" : false,
+	"force"   : false,
+	"fmriprep_legacy_layout" : false,
+	"force_params_file" : "[file,taskName]",
 	"config": {
-		"fmriprep_analysis": "01",
-		"subject" : "002",
-		"tr"      : 2,
-		"etcorrection" : true,
-		"neuropythy"   : true,
-		"rois"    : "[V1,V2]",
-		"atlas"   : "benson",
-		"force"   : true,
-		"fmriprep_legacy_layout" : false
+		"fmriprep_analysis": "01"
 
 	}
 }

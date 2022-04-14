@@ -6,120 +6,107 @@ Created on Wed Aug 25 13:28:36 2021
 @author: dlinhardt
 """
 
-from nilearn import image
-from nilearn.surface import vol_to_surf
 import nibabel as nib
 from os import path
 import bids
 import numpy as np
-from shutil import copy2 as copy
-import neuropythy as ny
 import argparse
 from glob import glob
+import neuropythy as ny
+import sys
 
-def str2bool(v):
-  return v.lower() in ("yes", "true", "t", "1")
+def link_stimuli(sub, sess, layout, bidsDir, outP, atlases, rois, etcorr, force, verbose):
+    def die(*args):
+        print(*args)
+        sys.exit(1)
+    def note(*args):
+        if verbose: print(*args)
+        return None
 
-# parser
-parser = argparse.ArgumentParser(description='parser for script converting mrVista stimulus files to nii')
-
-parser.add_argument('sub',         type=str, help='subject name')
-parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
-parser.add_argument('output_dir',  type=str, help='output subject directory')
-parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
-parser.add_argument('--areas',     type=str, help='which atlas to use for the region comparison [default: benson]', default='[V1]')
-parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
-
-args = parser.parse_args()
-
-etcorr = str2bool(args.etcorr)
-force  = str2bool(args.force)
-
-# base paths
-outP = args.output_dir
-
-# get the bids layout fur given subject
-layout = bids.BIDSLayout(args.bids_in_dir)
-
-subs = layout.get(return_type='id', target='subject')
-
-if args.sub in subs:
-    sub = args.sub
-else:
-    exit(3)
-    
-# extract the ROIs
-rois = args.areas.split(']')[0].split('[')[-1].split(',')
-
-# go for all given ROIs
-for roi in rois:
+    for atlas in atlases:
+        if rois[0] == 'all':
+            if atlas == 'benson':
+                mdl = ny.vision.retinotopy_model('benson17', 'lh')
+                areaLabels = dict(mdl.area_id_to_name)
+                areaLabels = { areaLabels[k]:k for k in areaLabels }
+                rois = list(areaLabels.keys())
+            elif atlas == 'wang':
+                rois = ["V1v", "V1d", "V2v", "V2d", "V3v", "V3d",
+                        "hV4", "VO1", "VO2", "PHC1", "PHC2",
+                        "V3A", "V3B", "LO1", "LO2", "TO1", "TO2",
+                        "IPS0", "IPS1", "IPS2", "IPS3", "IPS4", "IPS5",
+                        "SPL1", "hFEF"]
                 
-    sess = layout.get(subject=sub, return_type='id', target='session')  
-    
-    for sesI,ses in enumerate(sess):
-    
-        tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')  
-    
-        for task in tasks:
+        # go for all given ROIs
+        for roi in rois:
             
-            apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
-            try:
-                stimName  = apertures[[f'task-{task[:3]}' in ap for ap in apertures]].item()
-            except:
-                continue
+            for sesI,ses in enumerate(sess):
             
+                tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')  
             
-            runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
-            
-            for run in runs:
-                
-                # create events.tsv without ET
-                newTSV = path.join(outP, f'ses-{ses}', 'func', 
-                                   f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
-                niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}_bold.nii.gz')
-                
-                if not path.isfile(newTSV) or force:
-                    with open(newTSV, 'w') as file:
-                        
-                        nii = nib.load(stimName)
-                        TR  = nii.header['pixdim'][4]
-                        nT  = nii.shape[3]
-                        
-                        # fill the events file
-                        file.writelines('onset\tduration\tstim_file\tstim_file_index\n')
-                        
-                        for i in range(nT):
-                            file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimName.split("/")[-1]}\t{i+1}\n')
-                
+                for task in tasks:
                     
-                
-                # create events.tsv for ET corr
-                if etcorr:
-                    outPET = outP.replace('/sub-', '_ET/sub-')
-                    if path.isdir(outPET):
+                    apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
+                    try:
+                        stimName  = apertures[[f'task-{task}' in ap for ap in apertures]].item()
+                    except:
+                        continue
+                    
+                    
+                    runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
+                    
+                    for run in runs:
                         
-                        newTSV = path.join(outPET, f'ses-{ses}', 'func', 
+                        # create events.tsv without ET
+                        newTSV = path.join(outP, f'ses-{ses}', 'func', 
                                            f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
-                        niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}_bold.nii.gz')
-                       
-                        stimNameET = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
-                                
-                        if not path.exists(newTSV) or force:
+                        niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}-{atlas}_bold.nii.gz')
+                        
+                        if not path.isfile(newTSV) or force:
                             with open(newTSV, 'w') as file:
                                 
-                                nii = nib.load(stimNameET)
-                                TR = nii.header['pixdim'][4]
-                                nT = nii.shape[3]
+                                nii = nib.load(stimName)
+                                TR  = nii.header['pixdim'][4]
+                                nT  = nii.shape[3]
                                 
                                 # fill the events file
                                 file.writelines('onset\tduration\tstim_file\tstim_file_index\n')
                                 
                                 for i in range(nT):
-                                    file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimNameET.split("/")[-1]}\t{i+1}\n')
+                                    file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimName.split("/")[-1]}\t{i+1}\n')
+                        
+                            
+                        
+                        # create events.tsv for ET corr
+                        if etcorr:
+                            outPET = outP.replace('/sub-', '_ET/sub-')
+                            if path.isdir(outPET):
+                                
+                                newTSV = path.join(outPET, f'ses-{ses}', 'func', 
+                                                   f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
+                                niiPa = newTSV.replace('_events.tsv', f'_desc-{roi}-{atlas}_bold.nii.gz')
+                               
+                                stimNameET = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_apertures.nii.gz')
+                                        
+                                if not path.isfile(newTSV) or force:
+                                    if not path.isfile(stimNameET):
+                                        print(f'did not find {stimNameET}!')
+                                        continue
+                                        
+                                    nii = nib.load(stimNameET)
+                                    TR = nii.header['pixdim'][4]
+                                    nT = nii.shape[3]
                                     
-                    else:
-                        print('No eyetracker analysis-XX folder found!')
-                
+                                    # fill the events file
+                                    with open(newTSV, 'w') as file:
+                                        file.writelines('onset\tduration\tstim_file\tstim_file_index\n')
+                                        
+                                        for i in range(nT):
+                                            file.write(f'{i*TR:.3f}\t{TR:.3f}\t{stimNameET.split("/")[-1]}\t{i+1}\n')
+                                            
+                            else:
+                                print('No eyetracker analysis-XX folder found!')
+                        
     
 
 

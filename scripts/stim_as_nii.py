@@ -5,137 +5,122 @@ Created on Wed Jul 28 10:51:30 2021
 
 @author: dlinhardt
 """
-import argparse
 import numpy as np
 from os import path, makedirs
-import bids
 import nibabel as nib
 from scipy.io import loadmat
 from scipy.ndimage import shift
 from glob import glob
+import sys
 
-def str2bool(v):
-  return v.lower() in ("yes", "true", "t", "1")
+# convert stimulus from matlab to nii.gz if not done yet
+def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
+    def die(*args):
+        print(*args)
+        sys.exit(1)
+    def note(*args):
+        if verbose: print(*args)
+        return None
 
-# parser
-parser = argparse.ArgumentParser(description='parser for script converting mrVista stimulus files to nii')
-
-parser.add_argument('sub',         type=str, help='subject name')
-parser.add_argument('bids_in_dir', type=str, help='input directory before fmriprep for BIDS layout')
-parser.add_argument('output_dir',  type=str, help='output subject directory')
-parser.add_argument('TR',          type=float, help='Repetition Time in s')
-parser.add_argument('--etcorr',    type=str, help='perform an eyetracker correction [default: False]', default='False')
-parser.add_argument('--force',     type=str, help='force a new run [default: False]', default='False')
-
-args = parser.parse_args()
-
-etcorr = str2bool(args.etcorr)
-force  = str2bool(args.force)
-
-# base paths
-outP = args.output_dir
-
-# create the output folders
-makedirs(outP, exist_ok=True)
+    if forceParams:
+        paramsFile, task = forceParams
+        logPs = [path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile)]
+    else:  
+        logPs = np.array(glob(path.join(bidsDir, 'sourcedata', 'vistadisplog', 
+                                        f'sub-{sub}', '*', '*1_params.mat')))
+    
+    # check if we found params files
+    if len(logPs)==0:
+        print('We could not find the vistadisp output files in bids format at:')
+        print(path.join(bidsDir, 'sourcedata', 'vistadisplog', 
+                                    f'sub-{sub}', 'ses-XXX'))
+        print('alternatively use config "force_params_file":"[<file>,<task>]"')
+        die('Therefore we will break here!')
         
-# get the bids layout fur given subject
-layout = bids.BIDSLayout(args.bids_in_dir)
-
-subs = layout.get(return_type='id', target='subject')
-
-if args.sub in subs:
-    sub = args.sub
-else:
-    exit(3)
-    
-
-#%% convert stimulus from matlab to nii.gz if not done yet
-stims = np.array(glob(path.join(args.bids_in_dir, 'stimuli', '*_stimulus.mat')))
-stimsBase = np.array([stims[i].split('task-')[-1].split('_stimulus.mat')[0] for i in range(len(stims))])
-
-for stimI,stim in enumerate(stimsBase):
-    makedirs(path.join(outP, 'stimuli'), exist_ok=True)
-    oFname = path.join(outP, 'stimuli', f'task-{stim}_apertures.nii.gz')
-    
-    if not path.exists(oFname) or force:
-        # load stimulus from mrVista stimulation file
-        origStimF = stims[stimI]
+    # go through all param files and creat stimuli from them
+    for logP in logPs:
+        stim  = loadmat(logP, simplify_cells=True)['params']['loadMatrix'].split('/')[-1].split('\\')[-1]
+        stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
         
-        if not path.exists(origStimF): 
-            exit(f'Did not find stim File: {origStimF}')
-                    
-        origStim = loadmat(origStimF, simplify_cells=True)
-        stimSeq  = origStim['stimulus']['seq']
-        oImages  = origStim['stimulus']['images']
-                    
-        stimImagesU, stimImagesUC = np.unique(oImages, return_counts=True)
-        oImages[oImages!=stimImagesU[np.argmax(stimImagesUC)]] = 1
-        oImages[oImages==stimImagesU[np.argmax(stimImagesUC)]] = 0
-        oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*args.TR)]-1] # 8Hz flickering * 2s TR
-                    
-        img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
-        img.header['pixdim'][1:5] = [1,1,1,args.TR]
-        img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
-        img.header['cal_max'] = 1
-        img.header['xyzt_units'] = 10
-        nib.save(img, oFname)
-
-
-
-#%% do the shifting for ET corr
-if etcorr:    
-    
-    # base paths
-    outPET = args.output_dir.replace('/sub-', '_ET/sub-')
-    
-    # create the output folders
-    makedirs(outPET, exist_ok=True)
-    
-    sess = layout.get(subject=sub, return_type='id', target='session')
-    
-    for sesI,ses in enumerate(sess):
-    
-        tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')
+        if not forceParams:
+            task = logP.split('task-')[-1].split('_run')[0]
         
-        for taskI,task in enumerate(tasks):
+        makedirs(path.join(outP, 'stimuli'), exist_ok=True)
+        oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
+        
+        if not path.isfile(oFname) or force:
+            if not path.isfile(stimP): 
+                exit(f'Did not find stim File: {stimP}')
+                
+            imagesFile = loadmat(stimP, simplify_cells=True)
+            paramsFile = loadmat(logP, simplify_cells=True)
             
-            try:
-                origStimF = stims[[task[:3] in ap for ap in stimsBase]].item()
-            except:
-                print(f'No eyetracker correction for sub-{sub}_ses-{ses}_task-{task} possible')
-                continue
+            seq       = imagesFile['stimulus']['seq']
+            seqTiming = imagesFile['stimulus']['seqtiming']
+            images    = imagesFile['stimulus']['images']
+            tr         = paramsFile['params']['tr']
+                
+                        
+            stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
+            images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
+            images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
+            oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
+    
+            img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
+            img.header['pixdim'][1:5] = [1,1,1,tr]
+            img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
+            img.header['cal_max'] = 1
+            img.header['xyzt_units'] = 10
+            nib.save(img, oFname)
+    
+    
+    #%% do the shifting for ET corr
+    if etcorr and not forceParams:    
+        
+        # base paths
+        outPET = outP.replace('/sub-', '_ET/sub-')
+        
+        # create the output folders
+        makedirs(outPET, exist_ok=True)
+                
+        for sesI,ses in enumerate(sess):
             
-            if not path.exists(origStimF): 
-                print(f'Did not find stim File: {origStimF}')
-                continue
+            logPs = np.array(glob(path.join(bidsDir, 'sourcedata', 'vistadisplog', 
+                                            f'sub-{sub}', f'ses-{ses}', '*_params.mat')))
             
-            runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
-            
-            for runI,run in enumerate(runs):
-            
+            for logP in logPs:
+                stim  = loadmat(logP, simplify_cells=True)['LoadStimName']
+                stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim+'.mat')
+                task  = logP.split('task-')[-1].split('_run')[0]
+                run   = logP.split('run-')[-1].split('_')[0]
+                
                 makedirs(path.join(outPET, 'stimuli'), exist_ok=True)
                 oFname = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
-                gazeFile = path.join(args.bids_in_dir, f'sub-{sub}', f'ses-{ses}', 'etdata', 
-                                     f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_gaze.mat')
+                gazeFile = path.join(bidsDir, 'sourcedata', 'etdata', f'sub-{sub}', f'ses-{ses}', 
+                                     f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_gaze.mat')
                 
-                if not path.exists(gazeFile):
-                    print(f'No gaze file is found at {gazeFile}!')
-                    print( 'Therefore, we skip eyetracker correction...')
-                    continue
+                if not path.isfile(gazeFile):
+                    print(f'Gaze file not found at {gazeFile}')
+                    print( 'switching off eyetracker correction!')
+                    etcorr = False
                 
-                if not path.exists(oFname) or force:
+                if not path.isfile(oFname) or force:
+                    if not path.isfile(stimP): 
+                        exit(f'Did not find stim File: {stimP}')
                         
-                    # load stimulus from mrVista stimulation file
-                    origStim = loadmat(origStimF, simplify_cells=True)
-                    stimSeq  = origStim['stimulus']['seq']
-                    oImages  = origStim['stimulus']['images']
+                    imagesFile = loadmat(stimP, simplify_cells=True)
+                    paramsFile = loadmat(logP, simplify_cells=True)
                     
-                    stimImagesU, stimImagesUC = np.unique(oImages, return_counts=True)
-                    oImages[oImages!=stimImagesU[np.argmax(stimImagesUC)]] = 1
-                    oImages[oImages==stimImagesU[np.argmax(stimImagesUC)]] = 0
-                    oStimVid  = oImages[:,:,stimSeq[::int(1/origStim['stimulus']['seqtiming'][1]*args.TR)]-1] # 8Hz flickering * 2s TR
+                    seq       = imagesFile['stimulus']['seq']
+                    seqTiming = imagesFile['stimulus']['seqtiming']
+                    images    = imagesFile['stimulus']['images']
+                    tr        = paramsFile['params']['tr']
+                                
+                    stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
+                    images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
+                    images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
+                    oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
                     
-                    # load the jitter file
                     gaze = loadmat(gazeFile, simplify_cells=True)
                     
                     # get rid of out of image data (loss of tracking)
@@ -167,8 +152,10 @@ if etcorr:
                         
                         
                     img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
-                    img.header['pixdim'][1:5] = [1,1,1,2]
+                    img.header['pixdim'][1:5] = [1,1,1,tr]
                     img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
                     img.header['cal_max'] = 1
                     img.header['xyzt_units'] = 10
                     nib.save(img, oFname)
+                        
+    return etcorr
