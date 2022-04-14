@@ -37,7 +37,7 @@ try:
 except Exception:
     die("Could not read config.json!")
     
-# subject
+# subject from config and check
 sub   = conf['subject']
 
 layout = bids.BIDSLayout(bidsDir)
@@ -56,27 +56,28 @@ if hasattr('conf', 'session'):
 else:
     sess = layout.get(subject=sub, return_type='id', target='session')  
 
-# ROIs and atlases
+# ROIs and atlases from config
 areas   = conf['rois'].split(']')[0].split('[')[-1].split(',')
 atlases = conf['atlases'].split(']')[0].split('[')[-1].split(',')
 if atlases[0] == 'all':
     atlases = ['benson', 'wang']
 
+# get additional prams from config.json
 etcorr = conf['etcorrection']
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout']
-
 if hasattr('conf', 'forceParams'):
     forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
 else:
     forceParams = False
 
-# define the directories
+# define input direcotry
 inDir = os.path.join(flywheelBase, 'input', f'analysis-{conf["config"]["fmriprep_analysis"]}')
 
-# check the config file
+# check the BIDS directory
 if not os.path.isdir(bidsDir):
     die('no BIDS directory found!')
-    
+
+# define and check subject and freesurfer dir
 if conf['fmriprep_legacy_layout'] == True:
     subInDir = os.path.join(inDir, 'fmriprep', f'sub-{sub}')
     fsDir    = os.path.join(inDir, 'freesurfer')
@@ -84,6 +85,13 @@ else:
     subInDir = os.path.join(inDir, f'sub-{sub}')
     fsDir    = os.path.join(inDir, 'sourcedata', 'freesurfer')
 
+if os.path.isdir(fsDir):
+    note(f'Freesurfer dir found at {fsDir}!')
+else:
+    die(f'No freesurfer dir found at {fsDir}!')
+    
+
+###############################################################################    
 # define the output directory automatically
 # start a new one when the config part in the .json is different
 analysis_number = 0
@@ -118,11 +126,9 @@ note(f'Output directory: {outDir}')
 # define the subject output dir
 subOutDir = os.path.join(outDir, f'sub-{sub}')
 
-if os.path.isdir(fsDir):
-    note(f'Freesurfer dir found at {fsDir}!')
-else:
-    die(f'No freesurfer dir found at {fsDir}!')
-    
+
+###############################################################################
+# run neuropythy if not existing yet
 if not os.path.isfile(os.path.join(fsDir, f'sub-{sub}', 'surf', 'lh.benson14_varea.mgz')):
     try:
         print('Letting Neuropythy work...')
@@ -135,7 +141,7 @@ if not os.path.isfile(os.path.join(fsDir, f'sub-{sub}', 'surf', 'lh.benson14_var
 
 
 ###############################################################################
-# convert the stimuli to nifti
+# do the actual work
 os.chdir(flywheelBase)
 
 print('Converting Stimuli to .nii.gz...')
@@ -148,7 +154,6 @@ nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forcePara
 
 print('Creating events.tsv for the data containing the correct stimulus...')
 link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, force, verbose)
-# python link_stimuli.py $config_subject $BIDS_IN_DIR $SUB_OUT_DIR --areas $config_rois --etcorr $config_ETcorr --force $config_force
 
 os.chdir(os.path.expanduser("~"))
 

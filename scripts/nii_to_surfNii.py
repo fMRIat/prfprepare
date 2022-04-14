@@ -17,6 +17,13 @@ import sys
 
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
                    fmriprepLegacyLayout, atlases, rois, etcorr, force, verbose):
+    '''
+    This function converts the surface _bold.func.gz files to 2D nifti2 files
+    where every pixel contains one vertex timecourse. Additionally the first
+    timepoints are removed as defined in PrescanDuration in the _params.mat file
+    Further we can mask the data with different ROIs defined in atlases.
+    '''
+    
     def die(*args):
         print(*args)
         sys.exit(1)
@@ -88,12 +95,12 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             else:
                 roiAtlasStr = f'{roi}-{atlas}'
                 
-                                                
             for sesI,ses in enumerate(sess):
                 funcInP  = path.join(subInDir, f'ses-{ses}', 'func')
                 funcOutP = path.join(outP, f'ses-{ses}', 'func')
                 makedirs(funcOutP, exist_ok=True)
                 
+                # load masks only if not fullBrain
                 if not roi == 'fullBrain':
                     lh_mask = np.array([ l in roiLabels for l in lh_areas ])
                     rh_mask = np.array([ l in roiLabels for l in rh_areas ])
@@ -106,24 +113,26 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     
                     for run in runs:
                         
+                        # name the output files
                         newNiiPL = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_desc-{roiAtlasStr}_bold.nii.gz')
                         newNiiPR = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_desc-{roiAtlasStr}_bold.nii.gz')
         
+                        # check if already exists, if not force skip
                         if not path.exists(newNiiPL) or not path.isfile(newNiiPR) or force:
                             
                             # load the .gii in fsnative
                             if fmriprepLegacyLayout:
-                                # print('Reading fmriprep legacy files, space then hemi')
                                 giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-L_bold.func.gii')
                                 giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-R_bold.func.gii')
                             else:
-                                # print('Reading fmriprep NON-legacy files, hemi then space')
                                 giiPL = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-L_space-fsnative_bold.func.gii')
                                 giiPR = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-R_space-fsnative_bold.func.gii')
+                                
+                            # get the vertices data
                             verticesL = nib.load(giiPL).agg_data()
                             verticesR = nib.load(giiPR).agg_data()
                             
-                            # apply V1 mask
+                            # apply ROI mask if not fullBrain
                             if not roi == 'fullBrain':
                                 verticesL = verticesL[lh_mask,:]
                                 verticesR = verticesR[rh_mask,:]
@@ -170,6 +179,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             newNiiR.header['xyzt_units'] = 10
                             nib.save(newNiiR, newNiiPR)
                             
+                            # save files for eyetracker correction
                             if etcorr:
                                 outPET = outP.replace('/sub-', '_ET/sub-')
                                 if path.isdir(outP):
