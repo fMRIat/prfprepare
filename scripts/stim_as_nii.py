@@ -13,7 +13,7 @@ from scipy.ndimage import shift
 from glob import glob
 import sys
 
-# convert stimulus from matlab to nii.gz if not done yet
+# convert stimulus from matlab to .nii.gz if not done yet
 def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
     def die(*args):
         print(*args)

@@ -147,7 +147,7 @@ nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forcePara
 # we could add some option for smoothing here?
 
 print('Creating events.tsv for the data containing the correct stimulus...')
-link_stimuli(sub, sess, layout, bidsDir, subOutDir, atlases, areas, etcorr, force, verbose)
+link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, force, verbose)
 # python link_stimuli.py $config_subject $BIDS_IN_DIR $SUB_OUT_DIR --areas $config_rois --etcorr $config_ETcorr --force $config_force
 
 os.chdir(os.path.expanduser("~"))
