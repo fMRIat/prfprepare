@@ -65,6 +65,7 @@ RUN mkdir -p ${FLYWHEEL}
 
 # Copy and configure run script and metadata code
 COPY bin/run \
+	bin/run.py \
 	scripts/stim_as_nii.py    \ 
 	scripts/nii_to_surfNii.py \
 	scripts/link_stimuli.py    \
@@ -73,6 +74,7 @@ COPY bin/run \
 # Handle file properties for execution
 RUN chmod +x \
       ${FLYWHEEL}/run \
+      ${FLYWHEEL}/run.py \
 	${FLYWHEEL}/stim_as_nii.py    \ 
 	${FLYWHEEL}/nii_to_surfNii.py \
 	${FLYWHEEL}/link_stimuli.py    

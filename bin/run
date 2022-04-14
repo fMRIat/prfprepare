@@ -1,9 +1,22 @@
-#!/bin/sh
-#
-# Run freesurfer-recon-all Gear
-# Built to flywheel-v0 spec.
-#
-# https://surfer.nmr.mgh.harvard.edu/fswiki/ReconAllOutputFiles
+#! /bin/bash
+
+# The run script for the prfpreare docker.
+################################################################################
+set +o verbose   # Command echo off
+
+# If run in debug mode, just exec bash:
+if [ "$1" = "DEBUG" ]
+    then exec /bin/bash
+elif [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "-help" ] || [ "$1" = "help" ]
+    then cat /opt/help.txt
+    exit 0
+else 
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate scientific
+fi
+
+
+# Some variables and functions #################################################
 
 GEAR=prfprepare
 REPO=dlinhardt
@@ -11,181 +24,84 @@ CONTAINER="[${REPO}/$GEAR]"
 
 echo -e "$CONTAINER  Initiated"
 set -e
-###############################################################################
-# Utilities
-
-# Remove the spaces in directory and filenames recursively
-despacer () {
-  find "$1" -depth -name "* *" -execdir rename 's/ /_/g' "{}" \;
-}
-
-###############################################################################
-# Configure Freesurfer and MCR ENV
-
-export XAPPLRESDIR=/opt/mcr/v99/X11/app-defaults
-#export MCR_CACHE_FOLDER_NAME=/flywheel/v0/output/.mcrCache9.9
-
-export OS=Linux
-export FS_OVERRIDE=0
-export FIX_VERTEX_AREA=
-export FSF_OUTPUT_FORMAT=nii.gz
-export MNI_DIR=/opt/freesurfer/mni
-export LOCAL_DIR=/opt/freesurfer/local
-export FREESURFER_HOME=/opt/freesurfer
-export FSFAST_HOME=/opt/freesurfer/fsfast
-export MINC_BIN_DIR=/opt/freesurfer/mni/bin
-export MINC_LIB_DIR=/opt/freesurfer/mni/lib
-export MNI_DATAPATH=/opt/freesurfer/mni/data
-export FMRI_ANALYSIS_DIR=/opt/freesurfer/fsfast
-export PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
-export MNI_PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
-export XAPPLRESDIR=/opt/freesurfer/MCRv84/X11/app-defaults
-export PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin
-export PATH=$PATH:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin
-export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-export PATH=$PATH:/sbin:/bin
 
 
-# activate anaconda 
-source /opt/conda/etc/profile.d/conda.sh
+VERBOSE=0
+FORCE=0 # 1 for force overwrite
 
-###############################################################################
-# Initialize config parameters
-
-subject='  '
-tr='  '
-etcorrection='  '
-neuropythy='  '
-rois='  '
-atlas='  '
-force='  '
-
-
-###############################################################################
-# Parse config options from CONFIG file or MANIFEST
-
+# Built to flywheel-v0 spec.
 FLYWHEEL_BASE=/flywheel/v0
+OUTPUT_DIR="$FLYWHEEL_BASE"/output
+INPUT_DIR="$FLYWHEEL_BASE"/input
+CONFIG_FILE=$FLYWHEEL_BASE/config.json
 
-function parse_config {
-  CONFIG_FILE=$FLYWHEEL_BASE/config.json
-  echo -e "$(cat $CONFIG_FILE | jq -r '.config.'$1)"
+# How we print to stdout:
+function note {
+    [ "$VERBOSE" = 1 ] && echo "$CONTAINER" "   " "$*"
+}
+function err {
+    echo "<ERROR>" "$CONTAINER" "   " "$*" >2
+}
+function die {
+    echo "<ERROR>" "$CONTAINER" "   " "$*" >2
+    exit 1
 }
 
-# String parsing
-config_fmriprep_analysis="$(parse_config 'fmriprep_analysis')"
-config_subject="$(parse_config 'subject')"
-config_tr="$(parse_config 'tr')"
-config_ETcorr="$(parse_config 'etcorrection')"
-config_NEUROPYTHY="$(parse_config 'neuropythy')"
-config_rois="$(parse_config 'rois')"
-config_atlas="$(parse_config 'atlas')"
-config_force="$(parse_config 'force')"
-config_fmriprep_legacy="$(parse_config 'fmriprep_legacy_layout')"
+
+# Process Arguments ############################################################
+
+while [ "$#" -gt 0 ]
+do   case "$1"
+     in "--help"|"-h")
+            cat /opt/help.txt
+            exit 0
+            ;;
+        "--force"|"-f")
+            FORCE=1
+            ;;
+        "--verbose"|"-v")
+            VERBOSE=1
+            ;;
+        *)
+            if [ -z "$CONFIG_FILE" ]
+            then CONFIG_FILE="$1"
+            else die "Too many arguments given to docker"
+            fi
+            ;;
+     esac
+     shift
+done
 
 
-###############################################################################
-# Configure paths
+# Main Script ##################################################################
 
-OUTPUT_DIR=${FLYWHEEL_BASE}/output
-INPUT_DIR=${FLYWHEEL_BASE}/input/analysis-$config_fmriprep_analysis
-BIDS_IN_DIR=${FLYWHEEL_BASE}/BIDS
-
-SUBJECT_ID=sub-$config_subject
-
-if [[ ${config_fmriprep_legacy} == true ]]; then
-	SUB_IN_DIR=${INPUT_DIR}/fmriprep/$SUBJECT_ID
-	PRE_FS_DIR=${INPUT_DIR}/freesurfer
-else
-	SUB_IN_DIR=${INPUT_DIR}/$SUBJECT_ID
-	PRE_FS_DIR=${INPUT_DIR}/sourcedata/freesurfer
-fi
-
-OUT_DIR=${OUTPUT_DIR}/prfprepare/analysis-01
-SUB_OUT_DIR=${OUT_DIR}/$SUBJECT_ID
+# If no input is given we exit
+[ -r "$CONFIG_FILE" ] || {
+    note "No config file found. Please provide one!"
+    exit 0
+}
 
 
-# check if anat dir is in subject or session folder
-#if [[ -d ${SUB_IN_DIR}/anat ]]; then
-#	ANAT_DIR=${SUB_IN_DIR}/anat
-#else
-#	SES_ANAT_DIR=$(ls -d ${SUB_IN_DIR}/ses-*/anat)
-#	if [[ -d ${SES_ANAT_DIR} ]]; then
-#		ANAT_DIR=${SES_ANAT_DIR}/*/anat
-#	else
-#		echo "$CONTAINER  No input anatomy folders found in ${SUB_IN_DIR} or ${SES_ANAT_DIR} exiting... "
-#  		exit 1
-#	fi
-#fi
-#echo "$CONTAINER  Input anatomy dir found in ${ANAT_DIR} continue... "
+# otherwise, we run the following python code to parse the json and run the
+# /solve.sh script!
+# mkdir -p /running
+export FORCE
+export VERBOSE
+export FIELDS
+
+python run.py "$CONFIG_FILE" || die "Python startup script failed!"
+# At this point, the files should have been exported to the appropriate directory,
+# which should be linked to /running/out
+[ -d $OUTPUT_DIR ] || die "Python startup script failed to make output link!"
 
 
+# Handle permissions of the outputs
+cd /flywheel/v0/output
+find "$OUTPUT_DIR" -type d -exec chmod 777 '{}' ';'
+find "$OUTPUT_DIR" -type f -exec chmod 666 '{}' ';'
 
-
-###############################################################################
-# start doing something
-###############################################################################
-# check if the freesurfer dir is present
-if [[ ! -d ${PRE_FS_DIR} ]]; then
-	echo "$CONTAINER  No freesurfer dir found in ${PRE_FS_DIR} exiting... "
-	exit 2
-else
-	echo "$CONTAINER  Previous freesurfer dir found in ${PRE_FS_DIR} continue... "
-fi
-
-conda activate scientific
-# Neuropythy retino-template algorithm
-if [[ ${config_NEUROPYTHY} == true ]]; then
-	if [[ ! -f ${PRE_FS_DIR}/${SUBJECT_ID}/surf/lh.benson14_varea.mgz ]]; then
-		echo "$CONTAINER  Starting Neuropythy retino-template ..."
-		# Matlab installation interfers with neuropythy execution.
-		
-		SAVE_LD_LIBRARY_PATH=$LD_LIBRARY_PATH
-		export LD_LIBRARY_PATH=
-
-		cd $PRE_FS_DIR
-		python -m neuropythy atlas --verbose "${SUBJECT_ID}"
-		cd ~
-		export LD_LIBRARY_PATH=$SAVE_LD_LIBRARY_PATH
-		
-	else
-		echo "$CONTAINER  Neuropythy already done. continue..."
-	fi
-fi
-conda deactivate
-
-###############################################################################
-# convert the stimuli to nifti
-conda activate scientific
-cd $FLYWHEEL_BASE
-
-echo "$CONTAINER  Converting Stimuli to .nii.gz..."
-python stim_as_nii.py $config_subject $BIDS_IN_DIR $SUB_OUT_DIR $config_tr --etcorr $config_ETcorr --force $config_force
-
-echo "$CONTAINER  Masking data with visual areas and save them to 2D nifti..."
-python nii_to_surfNii.py $config_subject $BIDS_IN_DIR $SUB_OUT_DIR $SUB_IN_DIR $PRE_FS_DIR --fmriprep_legacy ${config_fmriprep_legacy} --atlas $config_atlas --areas $config_rois --etcorr $config_ETcorr --force $config_force
-# we could add some option for smoothing here
-
-echo "$CONTAINER  create events.tsv for the data containing the correct stimulus..."
-python link_stimuli.py $config_subject $BIDS_IN_DIR $SUB_OUT_DIR --areas $config_rois --etcorr $config_ETcorr --force $config_force
-
-cd ~
-conda deactivate
-
-
-
-###############################################################################
-# FINISH
-###############################################################################
-# Set permissions for outputs (prevent root only r/w)
-chmod -R 777 $OUTPUT_DIR
-echo -e "$CONTAINER  Done!"
-  
-# Get a list of the files in the output directory
-#outputs=$(find $OUTPUT_DIR/* -maxdepth 0 -type f -name "*.zip")
-
-# If outputs exist, generate metadata, and exit
-#if [[ -z $outputs ]]; then
-#  echo "$CONTAINER  GEAR FAILED... Exiting(1)"
-#  exit 1
-#else
+# we don't have any post-processing to do at this point (but later we might)
 exit 0
+
+
+
