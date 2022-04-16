@@ -29,6 +29,38 @@ set -e
 VERBOSE=0
 FORCE=0 # 1 for force overwrite
 
+###############################################################################
+# Configure Freesurfer 
+
+export OS=Linux
+export FS_OVERRIDE=0
+export FIX_VERTEX_AREA=
+export FSF_OUTPUT_FORMAT=nii.gz
+export MNI_DIR=/opt/freesurfer/mni
+export LOCAL_DIR=/opt/freesurfer/local
+export FREESURFER_HOME=/opt/freesurfer
+export FSFAST_HOME=/opt/freesurfer/fsfast
+export MINC_BIN_DIR=/opt/freesurfer/mni/bin
+export MINC_LIB_DIR=/opt/freesurfer/mni/lib
+export MNI_DATAPATH=/opt/freesurfer/mni/data
+export FMRI_ANALYSIS_DIR=/opt/freesurfer/fsfast
+export PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
+export MNI_PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
+export XAPPLRESDIR=/opt/freesurfer/MCRv84/X11/app-defaults
+export PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin
+export PATH=$PATH:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin
+export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+export PATH=$PATH:/sbin:/bin
+###############################################################################
+#
+
+# source FreeSurferEnv.sh then set subjects_dir
+/bin/bash -c 'source $FREESURFER_HOME/FreeSurferEnv.sh &>/dev/null'
+
+export SUBJECTS_DIR=${OUTPUT_DIR}
+
+echo "j.gutierrez@bcbl.eu 18112 *CKoktUM2tKG.  FSrcfSWoDhLJE" >> $FREESURFER_HOME/license.txt
+
 # Built to flywheel-v0 spec.
 FLYWHEEL_BASE=/flywheel/v0
 OUTPUT_DIR="$FLYWHEEL_BASE"/output
@@ -71,7 +103,11 @@ do   case "$1"
      esac
      shift
 done
-
+# Run the conda config again, to be sure we are using the right python
+conda deactivate
+source /opt/conda/etc/profile.d/conda.sh
+conda activate scientific
+python --version
 
 # Main Script ##################################################################
 
