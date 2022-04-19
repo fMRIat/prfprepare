@@ -15,6 +15,17 @@ import sys
 
 # convert stimulus from matlab to .nii.gz if not done yet
 def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
+    '''
+    Here the stimuli as shown to the subject will be saved as binarised version
+    into nifti files for the analysis. We find the stimuli in the _params.mat 
+    files. Per stimulus only one file will be saved.
+    If we wanna do eyetracker correction we read the _gaze.mat file and shift
+    the stimulus in the opposite direction as the subject was looking. This 
+    will allow for a better model creation during the analysis when we had 
+    gaze instabilities. This will need for stimulus files specific for
+    sub,ses,task,run!
+    '''
+    
     def die(*args):
         print(*args)
         sys.exit(1)
@@ -45,27 +56,31 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
         if not forceParams:
             task = logP.split('task-')[-1].split('_run')[0]
         
+        # create output dirs
         makedirs(path.join(outP, 'stimuli'), exist_ok=True)
         oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
         
         if not path.isfile(oFname) or force:
             if not path.isfile(stimP): 
                 exit(f'Did not find stim File: {stimP}')
-                
+            
+            # loat the mat files defining the stimulus
             imagesFile = loadmat(stimP, simplify_cells=True)
             paramsFile = loadmat(logP, simplify_cells=True)
             
+            # get all values necessary
             seq       = imagesFile['stimulus']['seq']
             seqTiming = imagesFile['stimulus']['seqtiming']
             images    = imagesFile['stimulus']['images']
             tr         = paramsFile['params']['tr']
                 
-                        
+            # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
             images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
             oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
     
+            # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
             img.header['pixdim'][1:5] = [1,1,1,tr]
             img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
@@ -108,29 +123,33 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
                     if not path.isfile(stimP): 
                         exit(f'Did not find stim File: {stimP}')
                         
+                    # loat the mat files defining the stimulus
                     imagesFile = loadmat(stimP, simplify_cells=True)
                     paramsFile = loadmat(logP, simplify_cells=True)
                     
+                    # get all values necessary
                     seq       = imagesFile['stimulus']['seq']
                     seqTiming = imagesFile['stimulus']['seqtiming']
                     images    = imagesFile['stimulus']['images']
                     tr        = paramsFile['params']['tr']
-                                
+                    
+                    # build and binarise the stimulus
                     stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
                     images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
                     images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
                     oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
                     
+                    # load the gaze file and do the gaze correction
                     gaze = loadmat(gazeFile, simplify_cells=True)
                     
                     # get rid of out of image data (loss of tracking)
                     gaze['x'][np.any((gaze['x']==0, gaze['x']==1280),0)] = 1280/2 # 1280 comes from resolution of screen
                     gaze['y'][np.any((gaze['y']==0, gaze['y']==1024),0)] = 1024/2 # 1024 comes from resolution of screen
+                    # TODO: load the resolution from the _params.mat file?
                     
                     # resamplet to TR
                     x = np.array([np.mean(f) for f in np.array_split(gaze['x'], oStimVid.shape[2])])
                     y = np.array([np.mean(f) for f in np.array_split(gaze['y'], oStimVid.shape[2])])
-                    
                     
                     # demean the ET data
                     x -= x.mean()
@@ -150,7 +169,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
                     for i in range(len(x)):
                         oStimVid[...,i] = shift(oStimVid[...,i], (-y[i], -x[i]), mode='constant', cval=0)
                         
-                        
+                    # save the stimulus as nifti
                     img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
                     img.header['pixdim'][1:5] = [1,1,1,tr]
                     img.header['qoffset_x']=img.header['qoffset_y']=img.header['qoffset_z'] = 1
