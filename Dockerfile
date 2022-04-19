@@ -17,9 +17,40 @@ WORKDIR ${FLYWHEEL}
 
 RUN apt-get update --fix-missing \
  && apt-get install -y wget bzip2 ca-certificates \
-      libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git mercurial subversion curl grep sed dpkg gcc g++ libeigen3-dev zlib1g-dev libqt4-opengl-dev libgl1-mesa-dev libfftw3-dev libtiff5-dev
-RUN apt-get install -y libxt6 libxcomposite1 libfontconfig1 libasound2
+      libglib2.0-0 \
+      libxext6 \
+      libsm6 \
+      libxrender1 \
+      git \
+      mercurial \
+      subversion \
+      curl \
+      grep \
+      sed \
+      dpkg \
+      gcc \
+      g++ \
+      libeigen3-dev \
+      zlib1g-dev \
+      libqt4-opengl-dev \
+      libgl1-mesa-dev \
+      libfftw3-dev \
+      libtiff5-dev
+RUN apt-get install -y \
+      libxt6 \
+      libxcomposite1 \
+      libfontconfig1 \
+      libasound2 \
+      bc \
+      tar \
+      zip \
+      unzip \
+      tcsh \
+      libgomp1 \
+      python-pip \ 
+      perl-modules
+      
+#################################### 
 
 
 
@@ -31,14 +62,30 @@ RUN apt-get update && apt-get install -y \
     xfonts-100dpi \
     xfonts-75dpi \
     xfonts-cyrillic \
-    zip \
-    unzip \
     python \
     imagemagick \
     wget \
     subversion\
     vim \
     bsdtar 
+
+
+
+# Download Freesurfer dev from MGH and untar to /opt
+RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.1.1/freesurfer-linux-centos6_x86_64-7.1.1.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
+
+
+ENV FREESURFER_HOME /opt/freesurfer
+
+
+###########################
+# Instal neurodebian, I don't know if it is required anymore or not...
+# ( I will skip it for now)
+
+
+
+
+
 
 ############################
 # Install miniconda
