@@ -14,6 +14,13 @@ from glob import glob
 import sys
 
 def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, force, verbose):
+    '''
+    Here we link the _bold.nii.gz files to the corresponding stimulus files
+    by creating _events.tsv files which contain the stimulus information.
+    Those files are specific for sub,ses,task and runs; 
+    but not specific for the area or atlas.
+    '''
+    
     def die(*args):
         print(*args)
         sys.exit(1)
@@ -33,12 +40,11 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, force, verbose):
             except:
                 continue
             
-            
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             
             for run in runs:
                 
-                # create events.tsv without ET
+                # create events.tsv
                 newTSV = path.join(outP, f'ses-{ses}', 'func', 
                                    f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
                 
