@@ -248,7 +248,7 @@ if etcorr:
 # we could add some option for smoothing here?
 
 print('Creating events.tsv for the data containing the correct stimulus...')
-link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average, force, verbose)
+link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, force, verbose)
 
 os.chdir(path.expanduser('~'))
 

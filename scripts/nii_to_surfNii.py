@@ -246,7 +246,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     
                     # create and save new nii img
                     try:
-                        apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
+                        apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
                         stimNii = nib.load(apertures[[f'task-{task}' in ap for ap in apertures]].item())
                     except:
                         print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
@@ -256,7 +256,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # scanner was running for longer than the task and is topped manually
                     stimLength = stimNii.shape[-1]
                     if vertices.shape[1] < stimLength:
-                        die(f'For {path.basename(newNiiP)} the data after removing prescanDuration ({prescan}s'
+                        die(f'For {path.basename(newNiiP)} the data after removing prescanDuration ({prescan}s) '
                             f'is shorter than the simulus file ({vertices.shape[1]}<{stimLength})')
                     elif vertices.shape[1] > stimLength:
                         vertices = vertices[:, :stimLength]
