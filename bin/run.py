@@ -89,9 +89,10 @@ if fs_annot=='custom.zip':
 
 
 # get additional prams from config.json
-etcorr = conf['etcorrection']
-fmriprepLegacyLayout = conf['fmriprep_legacy_layout']
-if hasattr('conf', 'forceParams'):
+etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
+average = conf['average_runs'] if 'average_runs' in conf.keys() else False
+fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
+if 'forceParams' in conf.keys():
     forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
 else:
     forceParams = False
@@ -237,17 +238,17 @@ etcorr = stim_as_nii(sub, sess, bidsDir, subOutDir, etcorr, forceParams, force, 
 
 print('Masking data with visual areas and save them to 2D nifti...')
 nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forceParams,
-               fmriprepLegacyLayout, atlases, areas, force, verbose)
+               fmriprepLegacyLayout, average, atlases, areas, force, verbose)
 
 # run this again with the eyetracker correction if applicable
 if etcorr:
     nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir.replace(f'analysis-{analysis_number:02d}',
                                                                            f'analysis-{analysis_number:02d}_ET'), 
-                   fsDir, forceParams, fmriprepLegacyLayout, atlases, areas, force, verbose)
+                   fsDir, forceParams, fmriprepLegacyLayout, average, atlases, areas, force, verbose)
 # we could add some option for smoothing here?
 
 print('Creating events.tsv for the data containing the correct stimulus...')
-link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, force, verbose)
+link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average, force, verbose)
 
 os.chdir(path.expanduser('~'))
 

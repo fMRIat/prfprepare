@@ -13,7 +13,7 @@ import numpy as np
 from glob import glob
 import sys
 
-def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, force, verbose):
+def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, average, force, verbose):
     '''
     Here we link the _bold.nii.gz files to the corresponding stimulus files
     by creating _events.tsv files which contain the stimulus information.
@@ -41,9 +41,11 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, force, verbose):
                 continue
             
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
+            # adapt for averaged runs
+            if average and len(runs) > 1:
+                runs.append(''.join(map(str, runs)) + 'av')
             
             for run in runs:
-                
                 # create events.tsv
                 newTSV = path.join(outP, f'ses-{ses}', 'func', 
                                    f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
@@ -65,6 +67,9 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, force, verbose):
                 
                 # create events.tsv for ET corr
                 if etcorr:
+                    if average:
+                        die('We can not do eyetracker correction on averaged runs!')
+                        
                     outPET = outP.replace('/sub-', '_ET/sub-')
                     if path.isdir(outPET):
                         

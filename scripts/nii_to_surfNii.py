@@ -13,7 +13,7 @@ import numpy as np
 import neuropythy as ny
 from glob import glob
 from scipy.io import loadmat
-import sys,json
+import sys,json,copy
 
 def die(*args):
     print(*args)
@@ -72,7 +72,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
 
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
-                   fmriprepLegacyLayout, atlases, roisIn, force, verbose):
+                   fmriprepLegacyLayout, average, atlases, roisIn, force, verbose):
     '''
     This function converts the surface _bold.func.gz files to 2D nifti2 files
     where every pixel contains one vertex timecourse. Different ROIs specified 
@@ -157,6 +157,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')
                         for task in tasks:
                             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
+                            # adapt for averaged runs
+                            if average and len(runs) > 1:
+                                runs.append(''.join(map(str, runs)) + 'av')
                             for run in runs:
                                 boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
                                 
@@ -174,7 +177,6 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         with open(jsonP, 'w') as fl:
                             json.dump(jsonI, fl, indent=4)
                             
-                            
         # now lets apply the merged mask to all bold files
         for sesI,ses in enumerate(sess):
             funcInP  = path.join(subInDir, f'ses-{ses}', 'func')
@@ -183,38 +185,64 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')            
             for task in tasks:
                 runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
+                # adapt for averaged runs
+                if average and len(runs) > 1:
+                    runsOrig = copy.copy(runs)
+                    runs.append(''.join(map(str, runs)) + 'av')
                 for run in runs:
-                    
-                    # name the output files
-                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
-    
                     # check if already exists, if not force skip
                     # if not path.exists(newNiiP) or force:
                         
-                    # load the .gii in fsnative
-                    if fmriprepLegacyLayout:
-                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                    if not 'av' in str(run):
+                        # name the output files
+                        newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+    
+                        # load the .gii in fsnative
+                        if fmriprepLegacyLayout:
+                            giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                        else:
+                            giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                            
+                        # get the vertices data
+                        vertices = nib.load(giiP).agg_data()
+                    
                     else:
-                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
-                        
-                    # get the vertices data
-                    vertices = nib.load(giiP).agg_data()
+                        # name the output files
+                        newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+    
+                        gii = []
+                        for r in runsOrig:
+                            if fmriprepLegacyLayout:
+                                giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                            else:
+                                giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                            
+                            gii.append(nib.load(giiP).agg_data())
+                        vertices = np.mean(gii, 0)
                     
                     # apply the combined ROI mask
                     vertices = vertices[allROImask,:]
                     
-                    # get rid of volumes before stimulus actually started
+                    # get rid of volumes before stimulus actually started (prescanDuration)
                     if forceParams:
                         paramsFile, task = forceParams
                         params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile), 
                                          simplify_cells=True)
-                    else:  
-                        params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}', 
-                                                   f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_params.mat'), 
-                                         simplify_cells=True)
-                        
-                    if params['params']['prescanDuration']>0:
-                        vertices = vertices[:,int(params['params']['prescanDuration']+1):]
+                    else:
+                        if not 'av' in str(run):
+                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}', 
+                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_params.mat'), 
+                                             simplify_cells=True)
+                        else:
+                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}', 
+                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'), 
+                                             simplify_cells=True)
+                    
+                    prescan = params['params']['prescanDuration']
+                    tr      = params['params']['tr']
+                    
+                    if prescan > 0:
+                        vertices = vertices[:, int(prescan/tr):]
                     
                     # create and save new nii img
                     try:
@@ -223,6 +251,17 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     except:
                         print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
                         continue
+                    
+                    # trim data to stimulus length, gets rid of volumes when the 
+                    # scanner was running for longer than the task and is topped manually
+                    stimLength = stimNii.shape[-1]
+                    if vertices.shape[1] < stimLength:
+                        die(f'For {path.basename(newNiiP)} the data after removing prescanDuration ({prescan}s'
+                            f'is shorter than the simulus file ({vertices.shape[1]}<{stimLength})')
+                    elif vertices.shape[1] > stimLength:
+                        vertices = vertices[:, :stimLength]
+                    else:
+                        pass
                     
                     # save the new nifti
                     newNii = nib.Nifti2Image(vertices[:,None,None,:].astype('float64'), affine=np.eye(4))
