@@ -72,13 +72,18 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
             seq       = imagesFile['stimulus']['seq']
             seqTiming = imagesFile['stimulus']['seqtiming']
             images    = imagesFile['stimulus']['images']
-            tr         = paramsFile['params']['tr']
+            tr        = paramsFile['params']['tr']
+            prescan   = paramsFile['params']['prescanDuration']
                 
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
             images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
             oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
+            
+            # remove prescanDuration from stimulus
+            if prescan > 0:
+                oStimVid = oStimVid[:,:, int(prescan/tr):]
     
             # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
