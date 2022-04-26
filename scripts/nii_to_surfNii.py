@@ -72,7 +72,8 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
 
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
-                   fmriprepLegacyLayout, average, atlases, roisIn, force, verbose):
+                   fmriprepLegacyLayout, average, output_only_average, 
+                   atlases, roisIn, force, verbose):
     '''
     This function converts the surface _bold.func.gz files to 2D nifti2 files
     where every pixel contains one vertex timecourse. Different ROIs specified 
@@ -158,8 +159,13 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         for task in tasks:
                             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
                             # adapt for averaged runs
-                            if average and len(runs) > 1:
-                                runs.append(''.join(map(str, runs)) + 'av')
+                            if average:
+                                if output_only_average:
+                                    if len(runs) == 1: continue
+                                    runs = [''.join(map(str, runs)) + 'avg']
+                                else:
+                                    if len(runs) > 1:
+                                        runs.append(''.join(map(str, runs)) + 'avg')
                             for run in runs:
                                 boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
                                 
@@ -186,9 +192,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             for task in tasks:
                 runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
                 # adapt for averaged runs
-                if average and len(runs) > 1:
+                if average:
                     runsOrig = copy.copy(runs)
-                    runs.append(''.join(map(str, runs)) + 'av')
+                    if output_only_average:
+                        if len(runs) == 1: continue
+                        runs = [''.join(map(str, runs)) + 'avg']
+                    else:
+                        if len(runs) > 1:
+                            runs.append(''.join(map(str, runs)) + 'avg')
                 for run in runs:
                     # check if already exists, if not force skip
                     # if not path.exists(newNiiP) or force:
