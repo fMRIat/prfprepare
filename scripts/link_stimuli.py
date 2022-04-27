@@ -45,11 +45,9 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
             # adapt for averaged runs
             if average:
                 if output_only_average:
-                    if len(runs) == 1: continue
                     runs = [''.join(map(str, runs)) + 'avg']
                 else:
-                    if len(runs) > 1:
-                        runs.append(''.join(map(str, runs)) + 'avg')
+                    runs.append(''.join(map(str, runs)) + 'avg')
             
             for run in runs:
                 # create events.tsv

@@ -161,11 +161,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             # adapt for averaged runs
                             if average:
                                 if output_only_average:
-                                    if len(runs) == 1: continue
                                     runs = [''.join(map(str, runs)) + 'avg']
                                 else:
-                                    if len(runs) > 1:
-                                        runs.append(''.join(map(str, runs)) + 'avg')
+                                    runs.append(''.join(map(str, runs)) + 'avg')
                             for run in runs:
                                 boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
                                 
@@ -195,11 +193,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                 if average:
                     runsOrig = copy.copy(runs)
                     if output_only_average:
-                        if len(runs) == 1: continue
                         runs = [''.join(map(str, runs)) + 'avg']
                     else:
-                        if len(runs) > 1:
-                            runs.append(''.join(map(str, runs)) + 'avg')
+                        runs.append(''.join(map(str, runs)) + 'avg')
                 for run in runs:
                     # check if already exists, if not force skip
                     # if not path.exists(newNiiP) or force:
@@ -229,12 +225,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
                             
                             gii.append(nib.load(giiP).agg_data())
-                            
-                        # crop them to the same length for averaging
-                        giiMinLength = min([ g.shape[1] for g in gii ])
-                        gii = [ g[:, :giiMinLength] for g in gii ]
-                        # average the runs
-                        vertices = np.mean(gii, 0)
+                        if len(gii) > 1:
+                            # crop them to the same length for averaging
+                            giiMinLength = min([ g.shape[1] for g in gii ])
+                            gii = [ g[:, :giiMinLength] for g in gii ]
+                            # average the runs
+                            vertices = np.mean(gii, 0)
+                        else:
+                            vertices = gii[0]
                     
                     # apply the combined ROI mask
                     vertices = vertices[allROImask,:]
