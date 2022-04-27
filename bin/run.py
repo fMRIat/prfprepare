@@ -95,6 +95,7 @@ if fs_annot=='custom.zip':
 
 # get additional prams from config.json
 customName  = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
+if customName=="": customName=False
 etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
 
