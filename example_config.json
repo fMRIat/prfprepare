@@ -1,13 +1,17 @@
 {
-	"subject" : "001",
-	"rois"    : "[V1,V2]",
-	"atlases" : "[benson,wang]",
-	"etcorrection" : false,
-	"force"   : false,
+	"subject"                : "001",
+    "fs_annot"               : "custom.zip",
+    "fs_annot_ids"           : "",
+	"etcorrection"           : false,
+	"force"                  : false,
+	"custom_output_name"     : "",
 	"fmriprep_legacy_layout" : false,
-	"force_params_file" : "[file,taskName]",
+	"force_params_file"      : "[file,taskName]",
 	"config": {
-		"fmriprep_analysis": "01"
-
-	}
+            "average_runs"        : true,
+            "output_only_average" : true,
+            "rois"                : "all",
+            "atlases"             : "all",
+            "fmriprep_analysis"   : "01"
+ 	}
 }
