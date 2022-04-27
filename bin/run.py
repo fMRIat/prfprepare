@@ -94,8 +94,10 @@ if fs_annot=='custom.zip':
 
 
 # get additional prams from config.json
+customName  = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
 etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
+
 if 'forceParams' in conf.keys():
     forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
 else:
@@ -268,8 +270,11 @@ print('Creating events.tsv for the data containing the correct stimulus...')
 link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average, 
              output_only_average, force, verbose)
 
+# if defined write link for custom output folder name
+if customName:
+    os.chdir(path.join(flywheelBase, 'output', 'prfprepare'))
+    os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
+
 os.chdir(path.expanduser('~'))
-
-
 # exit happily
 sys.exit(0)
