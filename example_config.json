@@ -1,12 +1,13 @@
 {
 	"subject"                : "001",
+    "session"                : "all",
     "fs_annot"               : "custom.zip",
     "fs_annot_ids"           : "",
 	"etcorrection"           : false,
 	"force"                  : false,
 	"custom_output_name"     : "",
 	"fmriprep_legacy_layout" : false,
-	"force_params_file"      : "[file,taskName]",
+	"forceParams"            : "",
 	"config": {
             "average_runs"        : true,
             "output_only_average" : true,
