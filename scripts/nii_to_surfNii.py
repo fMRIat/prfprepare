@@ -72,7 +72,8 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
 
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
-                   fmriprepLegacyLayout, average, atlases, roisIn, force, verbose):
+                   fmriprepLegacyLayout, average, output_only_average, 
+                   atlases, roisIn, force, verbose):
     '''
     This function converts the surface _bold.func.gz files to 2D nifti2 files
     where every pixel contains one vertex timecourse. Different ROIs specified 
@@ -158,8 +159,11 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         for task in tasks:
                             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
                             # adapt for averaged runs
-                            if average and len(runs) > 1:
-                                runs.append(''.join(map(str, runs)) + 'av')
+                            if average:
+                                if output_only_average:
+                                    runs = [''.join(map(str, runs)) + 'avg']
+                                else:
+                                    runs.append(''.join(map(str, runs)) + 'avg')
                             for run in runs:
                                 boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
                                 
@@ -186,9 +190,12 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             for task in tasks:
                 runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
                 # adapt for averaged runs
-                if average and len(runs) > 1:
+                if average:
                     runsOrig = copy.copy(runs)
-                    runs.append(''.join(map(str, runs)) + 'av')
+                    if output_only_average:
+                        runs = [''.join(map(str, runs)) + 'avg']
+                    else:
+                        runs.append(''.join(map(str, runs)) + 'avg')
                 for run in runs:
                     # check if already exists, if not force skip
                     # if not path.exists(newNiiP) or force:
@@ -218,7 +225,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
                             
                             gii.append(nib.load(giiP).agg_data())
-                        vertices = np.mean(gii, 0)
+                        if len(gii) > 1:
+                            # crop them to the same length for averaging
+                            giiMinLength = min([ g.shape[1] for g in gii ])
+                            gii = [ g[:, :giiMinLength] for g in gii ]
+                            # average the runs
+                            vertices = np.mean(gii, 0)
+                        else:
+                            vertices = gii[0]
                     
                     # apply the combined ROI mask
                     vertices = vertices[allROImask,:]

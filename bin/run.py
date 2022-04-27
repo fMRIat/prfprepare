@@ -66,7 +66,12 @@ else:
     sess = BIDSsess 
 
 # ROIs and atlases from config
+if 'rois' not in conf['config'].keys():
+    conf['config']['rois'] = 'all'
 areas   = conf['config']['rois'].split(']')[0].split('[')[-1].split(',')
+
+if 'atlases' not in conf['config'].keys():
+    conf['config']['atlases'] = 'all'
 atlases = conf['config']['atlases'].split(']')[0].split('[')[-1].split(',')
 if atlases[0] == 'all':
     atlases = ['benson', 'wang']
@@ -89,16 +94,30 @@ if fs_annot=='custom.zip':
 
 
 # get additional prams from config.json
+customName  = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
 etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
-average = conf['average_runs'] if 'average_runs' in conf.keys() else False
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
+
 if 'forceParams' in conf.keys():
     forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
 else:
     forceParams = False
+    
+if 'average_runs' not in conf['config'].keys():
+    conf['config']['average_runs'] = False
+average = conf['config']['average_runs']
+
+if 'output_only_average' not in conf['config'].keys() or average==False:
+    conf['config']['output_only_average'] = False
+output_only_average = conf['config']['output_only_average']
+
+if 'fmriprep_analysis' not in conf['config'].keys():
+    conf['config']['fmriprep_analysis'] = '01'
+fmriprepAnalysis = conf['config']['fmriprep_analysis']
+
 
 # define input direcotry
-inDir = path.join(flywheelBase, 'input', f'analysis-{conf["config"]["fmriprep_analysis"]}')
+inDir = path.join(flywheelBase, 'input', f'analysis-{fmriprepAnalysis}')
 note(f'Loading data fraom {inDir}')
 
 # check the BIDS directory
@@ -128,7 +147,7 @@ found_outbids_dir = False
 while not found_outbids_dir and analysis_number<100:
     analysis_number += 1
     
-    outDir=path.join(flywheelBase, 'output', 'prfprepare', f'analysis-{analysis_number:02d}')
+    outDir   = path.join(flywheelBase, 'output', 'prfprepare', f'analysis-{analysis_number:02d}')
     optsFile = path.join(outDir, 'options.json')  
     
     # if the analyis-XX directory exists check for the config file
@@ -238,20 +257,27 @@ etcorr = stim_as_nii(sub, sess, bidsDir, subOutDir, etcorr, forceParams, force, 
 
 print('Masking data with visual areas and save them to 2D nifti...')
 nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forceParams,
-               fmriprepLegacyLayout, average, atlases, areas, force, verbose)
+               fmriprepLegacyLayout, average, output_only_average, atlases, areas, force, verbose)
 
 # run this again with the eyetracker correction if applicable
 if etcorr:
     nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir.replace(f'analysis-{analysis_number:02d}',
                                                                            f'analysis-{analysis_number:02d}_ET'), 
-                   fsDir, forceParams, fmriprepLegacyLayout, average, atlases, areas, force, verbose)
+                   fsDir, forceParams, fmriprepLegacyLayout, average, output_only_average, atlases, areas, force, verbose)
 # we could add some option for smoothing here?
 
 print('Creating events.tsv for the data containing the correct stimulus...')
-link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, force, verbose)
+link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average, 
+             output_only_average, force, verbose)
+
+# if defined write link for custom output folder name
+if customName:
+    try:
+        os.chdir(path.join(flywheelBase, 'output', 'prfprepare'))
+        os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
+    except:
+        print(f'Could not create the custom_output_name analysis-{customName}')
 
 os.chdir(path.expanduser('~'))
-
-
 # exit happily
 sys.exit(0)

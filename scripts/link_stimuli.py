@@ -13,7 +13,8 @@ import numpy as np
 from glob import glob
 import sys
 
-def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, average, force, verbose):
+def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, 
+                 average, output_only_average, force, verbose):
     '''
     Here we link the _bold.nii.gz files to the corresponding stimulus files
     by creating _events.tsv files which contain the stimulus information.
@@ -42,8 +43,11 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, average, force, verbo
             
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             # adapt for averaged runs
-            if average and len(runs) > 1:
-                runs.append(''.join(map(str, runs)) + 'av')
+            if average:
+                if output_only_average:
+                    runs = [''.join(map(str, runs)) + 'avg']
+                else:
+                    runs.append(''.join(map(str, runs)) + 'avg')
             
             for run in runs:
                 # create events.tsv
