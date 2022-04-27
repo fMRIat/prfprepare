@@ -229,6 +229,11 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
                             
                             gii.append(nib.load(giiP).agg_data())
+                            
+                        # crop them to the same length for averaging
+                        giiMinLength = min([ g.shape[1] for g in gii ])
+                        gii = [ g[:, :giiMinLength] for g in gii ]
+                        # average the runs
                         vertices = np.mean(gii, 0)
                     
                     # apply the combined ROI mask
