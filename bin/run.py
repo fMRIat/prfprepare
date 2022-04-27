@@ -272,8 +272,11 @@ link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average,
 
 # if defined write link for custom output folder name
 if customName:
-    os.chdir(path.join(flywheelBase, 'output', 'prfprepare'))
-    os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
+    try:
+        os.chdir(path.join(flywheelBase, 'output', 'prfprepare'))
+        os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
+    except:
+        print(f'Could not create the custom_output_name analysis-{customName}')
 
 os.chdir(path.expanduser('~'))
 # exit happily
