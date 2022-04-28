@@ -43,7 +43,6 @@ export SINGULARITYENV_TEMPLATEFLOW_HOME="/templateflow"
 #                  -B /scratch/glerma:/scratch/glerma \
 SINGULARITY_CMD="unset PYTHONPATH && singularity run --cleanenv --no-home \
                  -B $BIDS_DIR:/data \
-                 -B /scratch/glerma:${SINGULARITYENV_HOME} \
                  -B ${TEMPLATEFLOW_HOST_HOME}:${SINGULARITYENV_TEMPLATEFLOW_HOME} \
                  -B ${FMRIPREP_HOST_CACHE}:/work \
                  /scratch/glerma/containers/fmriprep_21.0.2.sif"

@@ -1,8 +1,8 @@
 {
 	"subject"                : "001",
-    "session"                : "all",
-    "fs_annot"               : "custom.zip",
-    "fs_annot_ids"           : "",
+        "session"                : "all",
+        "fs_annot"               : "custom.zip",
+        "fs_annot_ids"           : "",
 	"etcorrection"           : false,
 	"force"                  : false,
 	"custom_output_name"     : "",
