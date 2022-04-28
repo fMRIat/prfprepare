@@ -59,7 +59,8 @@ export PATH=$PATH:/sbin:/bin
 
 export SUBJECTS_DIR=${OUTPUT_DIR}
 
-echo "j.gutierrez@bcbl.eu 18112 *CKoktUM2tKG.  FSrcfSWoDhLJE" >> $FREESURFER_HOME/license.txt
+# Pass the license when calling docker/singularity, Singularity does not allow to write within the machine and furthermore this way of working goes against Freesurfer's license
+# echo "j.gutierrez@bcbl.eu 18112 *CKoktUM2tKG.  FSrcfSWoDhLJE" >> $FREESURFER_HOME/license.txt
 
 # Built to flywheel-v0 spec.
 FLYWHEEL_BASE=/flywheel/v0
@@ -125,7 +126,7 @@ export FORCE
 export VERBOSE
 export FIELDS
 
-python run.py "$CONFIG_FILE" || die "Python startup script failed!"
+python ${FLYWHEEL_BASE}/run.py "$CONFIG_FILE" || die "Python startup script failed!"
 # At this point, the files should have been exported to the appropriate directory,
 # which should be linked to /running/out
 [ -d $OUTPUT_DIR ] || die "Python startup script failed to make output link!"
