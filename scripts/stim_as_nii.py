@@ -32,7 +32,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
     def note(*args):
         if verbose: print(*args)
         return None
-
+   
+    if forceParams==['']:forceParams=False
     if forceParams:
         paramsFile, task = forceParams
         logPs = [path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile)]
@@ -69,12 +70,16 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
             paramsFile = loadmat(logP, simplify_cells=True)
             
             # get all values necessary
-            seq       = imagesFile['stimulus']['seq']
-            seqTiming = imagesFile['stimulus']['seqtiming']
-            images    = imagesFile['stimulus']['images']
+            seq       = paramsFile['stimulus']['seq']
+            seqTiming = paramsFile['stimulus']['seqtiming']
             tr        = paramsFile['params']['tr']
             prescan   = paramsFile['params']['prescanDuration']
-                
+            # There are projects with 'images' directly or 'stimulus.images', check both
+            fields    = imagesFile.keys()
+            if 'stimulus' in fields: images = imagesFile['stimulus']['images']
+            elif 'images' in fields: images = imagesFile['images']
+            else: die('Neither stimulus or images fields found on image file')
+
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
