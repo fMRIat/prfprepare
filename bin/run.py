@@ -94,9 +94,13 @@ if fs_annot=='custom.zip':
 
 
 # get additional prams from config.json
-customName  = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
+customName = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
 if customName == ['']: customName=False
-etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
+
+etcorr = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
+
+use_numImages = conf['use_numImages'] if 'use_numImages' in conf.keys() else True
+
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
 
 if 'forceParams' in conf.keys():
@@ -256,7 +260,7 @@ if convert_custom_annot:
 os.chdir(flywheelBase)
 
 print('Converting Stimuli to .nii.gz...')
-etcorr = stim_as_nii(sub, sess, bidsDir, subOutDir, etcorr, forceParams, force, verbose)
+etcorr = stim_as_nii(sub, sess, bidsDir, subOutDir, etcorr, forceParams, use_numImages, force, verbose)
 
 print('Masking data with visual areas and save them to 2D nifti...')
 nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forceParams,

@@ -14,7 +14,7 @@ from glob import glob
 import sys
 
 # convert stimulus from matlab to .nii.gz if not done yet
-def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
+def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, force, verbose):
     '''
     Here the stimuli as shown to the subject will be saved as binarised version
     into nifti files for the analysis. We find the stimuli in the _params.mat 
@@ -71,7 +71,6 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
             
             # get all values necessary
             seq       = paramsFile['stimulus']['seq']
-            seqTiming = paramsFile['stimulus']['seqtiming']
             tr        = paramsFile['params']['tr']
             prescan   = paramsFile['params']['prescanDuration']
             # There are projects with 'images' directly or 'stimulus.images', check both
@@ -84,8 +83,18 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, force, verbose):
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
             images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
-            oStimVid  = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
             
+            # create it from frames
+            if use_numImages:
+                # calcualte it from numImages
+                numImages = paramsFile['params']['numImages']
+                idx = np.round(np.linspace(0, len(seq) - 1, numImages+prescan)).astype(int)
+                oStimVid = images[:,:, seq[idx]-1]     
+            else:
+                # calculate it from seqTiming
+                seqTiming = paramsFile['stimulus']['seqtiming']
+                oStimVid = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
+                    
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:,:, int(prescan/tr):]
