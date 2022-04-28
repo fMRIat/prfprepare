@@ -19,12 +19,12 @@ from zipfile import ZipFile
 import numpy as np
 
 # get all needed functions
-sys.path.insert(0, '../scripts/')
+flywheelBase  = '/flywheel/v0'
+sys.path.insert(0, flywheelBase)
 from stim_as_nii    import stim_as_nii
 from nii_to_surfNii import nii_to_surfNii
 from link_stimuli   import link_stimuli
 
-flywheelBase  = '/flywheel/v0'
 
 configFile = path.join(flywheelBase, 'config.json')
 bidsDir = path.join(flywheelBase, 'BIDS')
@@ -95,7 +95,7 @@ if fs_annot=='custom.zip':
 
 # get additional prams from config.json
 customName  = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
-if customName == "": customName=False
+if customName == ['']: customName=False
 etcorr  = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
 
@@ -103,7 +103,7 @@ if 'forceParams' in conf.keys():
     forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
 else:
     forceParams = False
-if forceParams == "": forceParams= False   
+if forceParams == ['']: forceParams= False   
 
 
 if 'average_runs' not in conf['config'].keys():
