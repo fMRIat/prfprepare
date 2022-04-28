@@ -11,19 +11,21 @@
 #SBATCH -e /scratch/glerma/logs/%x-%A-%a.err
 # ------------------------------------------
 
-
+# Make sure FS_LICENSE is defined in the container.
+export SINGULARITYENV_FS_LICENSE=/flywheel/v0/BIDS/.freesurfer.txt
 
 subject=$( sed -n -E "$((${SLURM_ARRAY_TASK_ID} + 1))s/sub-(\S*)\>.*/\1/gp" ${basedir}/BIDS/participants.tsv )
 echo 
 
+# Removed the --no-home directive because it was failing couldnot find run.py...
 SINGULARITY_CMD="module load Singularity/3.5.3-GCC-8.3.0 && \
                  unset PYTHONPATH && \
-                 singularity run --cleanenv --no-home \
+                 singularity run --cleanenv \
                      -B ${basedir}/BIDS/derivatives/fmriprep_21.0.2:/flywheel/v0/input \
                      -B ${basedir}/BIDS/derivatives:/flywheel/v0/output  \
                      -B ${basedir}/BIDS:/flywheel/v0/BIDS  \
                      -B ${basedir}/config${subject}.json:/flywheel/v0/config.json
-                      /scratch/glerma/containers/prfprepare_1.0.1.sif"
+                      /scratch/glerma/containers/prfprepare_1.0.2.sif"
 
 # Setup done, run the command
 echo Running task ${SLURM_ARRAY_TASK_ID}, for subject ${subject}
@@ -38,8 +40,9 @@ exit $exitcode
 
 
 
+
 # TO LAUNCH IT
-# export STUDY=/scratch/glerma/DATA/projectName/Nifti
-# cd $STUDY
-# sbatch --array=1-$(( $( wc -l $STUDY/participants.tsv | cut -f1 -d' ' ) - 1 )) ../fmriprep.slurm
+# FROM glerma@atlas-edr-login-02:/scratch/glerma/DATA/VWFA_FOV_HEB/BIDS:$
+# Execute this. It is relevant to execute from this folder and not from Nifti or BIDS
+# sbatch --array=1-$(( $( wc -l $basedir/BIDS/participants.tsv | cut -f1 -d' ' ) - 1 )) /dipc/glerma/soft/prfprepare/example_prfprepare.slurm
 
