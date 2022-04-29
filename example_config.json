@@ -8,7 +8,7 @@
 	"custom_output_name"     : "",
 	"fmriprep_legacy_layout" : false,
 	"forceParams"            : "",
-    "use_numImages"          : true;
+        "use_numImages"          : true;
 	"config": {
             "average_runs"        : true,
             "output_only_average" : true,
