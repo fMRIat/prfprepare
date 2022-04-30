@@ -50,7 +50,7 @@ sub   = conf['subject']
 
 layout = bids.BIDSLayout(bidsDir)
 BIDSsubs = layout.get(return_type='id', target='subject')
-
+verbose = conf['verbose']
 if not sub in BIDSsubs:
     die(f'We did not find given subject {sub} in BIDS dir!')
 note(f'Working on Subject: {sub}')
@@ -100,6 +100,8 @@ if customName == ['']: customName=False
 etcorr = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
 
 use_numImages = conf['use_numImages'] if 'use_numImages' in conf.keys() else True
+note(f'[run.py] use_numImages is: {use_numImages}')
+
 
 fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys() else False
 
@@ -125,7 +127,7 @@ fmriprepAnalysis = conf['config']['fmriprep_analysis']
 
 # define input direcotry
 inDir = path.join(flywheelBase, 'input', f'analysis-{fmriprepAnalysis}')
-note(f'Loading data fraom {inDir}')
+note(f'Loading data from {inDir}')
 
 # check the BIDS directory
 if not path.isdir(bidsDir):
