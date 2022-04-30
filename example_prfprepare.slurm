@@ -20,7 +20,7 @@ echo
 # Removed the --no-home directive because it was failing couldnot find run.py...
 SINGULARITY_CMD="module load Singularity/3.5.3-GCC-8.3.0 && \
                  unset PYTHONPATH && \
-                 singularity run --cleanenv \
+                 singularity run --cleanenv --home /scratch/glerma \
                      -B ${basedir}/BIDS/derivatives/fmriprep_21.0.2:/flywheel/v0/input \
                      -B ${basedir}/BIDS/derivatives:/flywheel/v0/output  \
                      -B ${basedir}/BIDS:/flywheel/v0/BIDS  \
