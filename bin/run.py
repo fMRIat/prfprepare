@@ -36,8 +36,6 @@ def note(*args):
     if verbose: print(*args)
     return None
 
-verbose = os.environ.get('VERBOSE', '0').strip() == '1'
-force   = os.environ.get('FORCE', '0').strip() == '1'
 
 try:
     with open(configFile, 'r') as fl:
@@ -51,6 +49,7 @@ sub   = conf['subject']
 layout = bids.BIDSLayout(bidsDir)
 BIDSsubs = layout.get(return_type='id', target='subject')
 verbose = conf['verbose']
+force   = conf['force']
 if not sub in BIDSsubs:
     die(f'We did not find given subject {sub} in BIDS dir!')
 note(f'Working on Subject: {sub}')
