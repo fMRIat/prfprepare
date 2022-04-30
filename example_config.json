@@ -1,19 +1,20 @@
 {
-	"subject"                : "001",
-        "session"                : "all",
-        "fs_annot"               : "custom.zip",
-        "fs_annot_ids"           : "",
-	"etcorrection"           : false,
-	"force"                  : false,
-	"custom_output_name"     : "",
-	"fmriprep_legacy_layout" : false,
-	"forceParams"            : "",
-        "use_numImages"          : true;
-	"config": {
-            "average_runs"        : true,
-            "output_only_average" : true,
-            "rois"                : "all",
-            "atlases"             : "all",
-            "fmriprep_analysis"   : "01"
+    "subject"                 : "001",
+    "session"                 : "all",
+    "fs_annot"                : "custom.zip",
+    "fs_annot_ids"            : "",
+    "etcorrection"            : false,
+    "force"                   : false,
+    "custom_output_name"      : "",
+    "fmriprep_legacy_layout"  : false,
+    "forceParams"             : "",
+    "use_numImages"           : true,
+    "verbose"                 : true,
+    "config": {
+        "average_runs"        : true,
+        "output_only_average" : true,
+        "rois"                : "all",
+        "atlases"             : "all",
+        "fmriprep_analysis"   : "01"
  	}
 }
