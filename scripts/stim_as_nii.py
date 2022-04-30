@@ -54,12 +54,16 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         stim  = loadmat(logP, simplify_cells=True)['params']['loadMatrix'].split('/')[-1].split('\\')[-1]
         stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
         
+
         if not forceParams:
             task = logP.split('task-')[-1].split('_run')[0]
         
+
         # create output dirs
         makedirs(path.join(outP, 'stimuli'), exist_ok=True)
         oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
+
+        note(f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, task is {task}, output file will be {oFname}') 
         
         if not path.isfile(oFname) or force:
             if not path.isfile(stimP): 
@@ -79,6 +83,10 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             elif 'images' in fields: images = imagesFile['images']
             else: die('Neither stimulus or images fields found on image file')
 
+            note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
+
+
+
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
@@ -88,9 +96,12 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             if use_numImages:
                 # calcualte it from numImages
                 numImages = paramsFile['params']['numImages']
-                idx = np.round(np.linspace(0, len(seq) - 1, numImages+prescan)).astype(int)
+                idx = np.linspace(0, len(seq)-1, int(numImages+prescan/tr)).astype(int)
                 oStimVid = images[:,:, seq[idx]-1]     
+                note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
+               
             else:
+                print('Using seqtiming')
                 # calculate it from seqTiming
                 seqTiming = paramsFile['stimulus']['seqtiming']
                 oStimVid = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
@@ -98,6 +109,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:,:, int(prescan/tr):]
+                note(f'Prescan > 0, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
     
             # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
@@ -106,11 +118,11 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             img.header['cal_max'] = 1
             img.header['xyzt_units'] = 10
             nib.save(img, oFname)
-    
+            note(f'saving file in {oFname}')
     
     #%% do the shifting for ET corr
     if etcorr and not forceParams:    
-        
+        note('etcorr is true and it will do it now')
         # base paths
         outPET = outP.replace('/sub-', '_ET/sub-')
         
