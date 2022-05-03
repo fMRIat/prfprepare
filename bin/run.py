@@ -89,7 +89,8 @@ if fs_annot=='custom.zip':
     # label folder with new files. 
     # Do it below after the dirs have been defined
     convert_custom_annot = True
-
+else:
+    convert_custom_annot = False
 
 
 # get additional prams from config.json
