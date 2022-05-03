@@ -173,7 +173,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         jsonI = {'atlas'          : atlas,
                                  'roi'            : roi,
                                  'hemisphere'     : hemi,
-                                 'thisHemiSize'   : nVertices,
+                                 'thisHemiSize'   : int(allROImask.sum()),
                                  'boldFiles'      : boldFiles,
                                  'roiIndFsnative' : np.where(thisROImask)[0].tolist(),
                                  'roiIndBold'     : np.where(thisROImask[allROImask])[0].tolist()
