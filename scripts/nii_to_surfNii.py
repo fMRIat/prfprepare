@@ -170,10 +170,11 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     
                         # define the json  for this specific atlas-roi combi for one subject and session
                         jsonP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlas}_maskinfo.json')
-                        jsonI = {'atlas'     : atlas,
-                                 'roi'       : roi,
-                                 'hemisphere': hemi,
-                                 'boldFiles' : boldFiles,
+                        jsonI = {'atlas'          : atlas,
+                                 'roi'            : roi,
+                                 'hemisphere'     : hemi,
+                                 'thisHemiSize'   : nVertices,
+                                 'boldFiles'      : boldFiles,
                                  'roiIndFsnative' : np.where(thisROImask)[0].tolist(),
                                  'roiIndBold'     : np.where(thisROImask[allROImask])[0].tolist()
                                 }
