@@ -25,27 +25,27 @@ For running prfprepare you need to provide the following folder structure:
 
 #### RUNNING prfprepare
 We provide an example rundocker.sh script with all necessary bindings and an example_config.json file in this repository.  
-example_config.json, * mandatory
-{
-    "subject"                 : "001",        #* define the subject number here
-    "session"                 : "all",        #  define sessions as "[001,002]" or "all", if not specified it will take all
-    "fs_annot"                : "custom.zip", #  WIP
-    "fs_annot_ids"            : "",           #  WIP
-    "etcorrection"            : false,        #  we can perform eyetracker correction, if not speciefied false
-    "force"                   : false,        #  fore redo all stepss, if not specified false
-    "custom_output_name"      : "",           #  we can write a link with the given name to the output folder, if not speciefied false
-    "fmriprep_legacy_layout"  : false,        #  true for fmriprep versions <21.0.0  
-    "forceParams"             : "",           #  instead of run-specific params file use the given one, WIP, see below
-    "use_numImages"           : true,         #  use number numImges or seqTimeing to create the stimulus, see below
-    "verbose"                 : true,         #  verbose output
-    "config": {                         #*  this part will define if we start a new output direcotory or not
-        "average_runs"        : true,         #  average runs of the same task, if not speciefied false
-        "output_only_average" : true,         #  output only the average, if not speciefied false
-        "rois"                : "all",        #  define the ROIs to output as "[V1,V2,...]" or "all", if not speciefied it will take all
-        "atlases"             : "all",        #  define the atlases to output as "wang" or "all", if not speciefied it will take all (wang,benson)
-        "fmriprep_analysis"   : "01"          #  define the fmriprep analysis folder number, if not specified ie assumes "01"
- 	}
-}
+example_config.json, * mandatory  
+{  
+    "subject"                 : "001",        #* define the subject number here  
+    "session"                 : "all",        #  define sessions as "[001,002]" or "all", if not specified it will take all  
+    "fs_annot"                : "custom.zip", #  WIP  
+    "fs_annot_ids"            : "",           #  WIP  
+    "etcorrection"            : false,        #  we can perform eyetracker correction, if not speciefied false  
+    "force"                   : false,        #  fore redo all stepss, if not specified false  
+    "custom_output_name"      : "",           #  we can write a link with the given name to the output folder, if not speciefied false  
+    "fmriprep_legacy_layout"  : false,        #  true for fmriprep versions <21.0.0   
+    "forceParams"             : "",           #  instead of run-specific params file use the given one, WIP, see below  
+    "use_numImages"           : true,         #  use number numImges or seqTimeing to create the stimulus, see below  
+    "verbose"                 : true,         #  verbose output  
+    "config": {                         #*  this part will define if we start a new output direcotory or not  
+        "average_runs"        : true,         #  average runs of the same task, if not speciefied false  
+        "output_only_average" : true,         #  output only the average, if not speciefied false  
+        "rois"                : "all",        #  define the ROIs to output as "[V1,V2,...]" or "all", if not speciefied it will take all  
+        "atlases"             : "all",        #  define the atlases to output as "wang" or "all", if not speciefied it will take all (wang,benson)  
+        "fmriprep_analysis"   : "01"          #  define the fmriprep analysis folder number, if not specified ie assumes "01"  
+ 	}  
+}  
 
 
 
