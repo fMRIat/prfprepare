@@ -56,7 +56,7 @@ note(f'Working on Subject: {sub}')
 
 # session if given otherwise it will loop through sessions from BIDS
 BIDSsess = layout.get(subject=sub, return_type='id', target='session') 
-if hasattr('conf', 'session'):
+if 'session' in conf.keys():
     if conf['session'][0] == 'all':
         sess =  BIDSsess
     else:
