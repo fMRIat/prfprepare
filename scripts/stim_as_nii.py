@@ -85,8 +85,6 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
             note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
 
-
-
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
             images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
