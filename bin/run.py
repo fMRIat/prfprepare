@@ -60,7 +60,7 @@ if 'session' in conf.keys():
     if conf['session'][0] == 'all':
         sess =  BIDSsess
     else:
-        sess = conf['session']
+        sess = [conf['session']]
 else:
     sess = BIDSsess 
 
