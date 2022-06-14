@@ -184,6 +184,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             
         # now lets apply the merged mask to all bold files
         for sesI,ses in enumerate(sess):
+            note(f'[nii_to_sufNii.py] Working on sub-{sub} ses-{ses} hemi-{hemi.upper()}')
             funcInP  = path.join(subInDir, f'ses-{ses}', 'func')
             funcOutP = path.join(outP, f'ses-{ses}', 'func')
                         
