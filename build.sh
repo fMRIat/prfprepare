@@ -6,9 +6,10 @@
 #       added option custom_output_name
 # 1.0.2 Removed Freesurfer license writing within the machine because of FS's license and because Singularity does not allow writing within file system
 # 1.0.3 added info in the maskinfo.json, bugfixes
+# 1.0.4 fix bug when only doing one session
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.0.3
+VERSION=1.0.4
 docker build --tag $ME/$GEAR:$VERSION .
 
