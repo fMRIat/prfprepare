@@ -6,7 +6,7 @@
 #       added option custom_output_name
 # 1.0.2 Removed Freesurfer license writing within the machine because of FS's license and because Singularity does not allow writing within file system
 # 1.0.3 added info in the maskinfo.json, bugfixes
-# 1.0.4 fix bug when only doing one session
+# 1.0.4 add option for all subs; fix bug when only doing one session
 
 ME=davidlinhardt
 GEAR=prfprepare
