@@ -92,22 +92,23 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             
             # create it from frames
             if use_numImages:
-                # calcualte it from numImages
+                # load in the numImages
                 numImages = paramsFile['params']['numImages']
-                idx = np.linspace(0, len(seq)-1, int(numImages+prescan/tr)).astype(int)
-                oStimVid = images[:,:, seq[idx]-1]     
-                note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
-               
+                idx = np.linspace(0, len(seq)-1, int(numImages+prescan/tr), dtype=int)
             else:
                 print('Using seqtiming')
-                # calculate it from seqTiming
+                # calculate the numImages from seqTiming
                 seqTiming = paramsFile['stimulus']['seqtiming']
-                oStimVid = images[:,:, seq[::int(1/seqTiming[1]*tr)]-1] # 8Hz flickering * 2s TR
+                numImages = len(seq) * seqTiming[1] / tr
+                idx = np.linspace(0, len(seq)-1, int(numImages), dtype=int)
                     
+            oStimVid = images[:,:, seq[idx]-1]     
+            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
+            
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:,:, int(prescan/tr):]
-                note(f'Prescan > 0, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
+                note(f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
     
             # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:,:,None,:].astype('float64'), np.eye(4))
