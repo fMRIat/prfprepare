@@ -87,8 +87,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
-            images[images!=stimImagesU[np.argmax(stimImagesUC)]] = 1
-            images[images==stimImagesU[np.argmax(stimImagesUC)]] = 0
+            images = np.where(images == stimImagesU[np.argmax(stimImagesUC)], 0, 1)
             
             # create it from frames
             if use_numImages:
