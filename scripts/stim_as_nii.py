@@ -56,7 +56,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
     # go through all param files and creat stimuli from them
     for logP in logPs:
-        stim  = loadmat(logP, simplify_cells=True)['params']['loadMatrix'].split('/')[-1].split('\\')[-1]
+        stim = loadmat(logP, simplify_cells=True)['params']['loadMatrix'].split('/')[-1].split('\\')[-1]
         stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
 
         if not forceParams:
@@ -66,7 +66,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         makedirs(path.join(outP, 'stimuli'), exist_ok=True)
         oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
 
-        note(f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, task is {task}, output file will be {oFname}')
+        note(
+            f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, task is {task}, output file will be {oFname}')
 
         if not path.isfile(oFname) or force:
             if not path.isfile(stimP):
@@ -77,11 +78,11 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             paramsFile = loadmat(logP, simplify_cells=True)
 
             # get all values necessary
-            seq       = paramsFile['stimulus']['seq']
-            tr        = paramsFile['params']['tr']
-            prescan   = paramsFile['params']['prescanDuration']
+            seq = paramsFile['stimulus']['seq']
+            tr = paramsFile['params']['tr']
+            prescan = paramsFile['params']['prescanDuration']
             # There are projects with 'images' directly or 'stimulus.images', check both
-            fields    = imagesFile.keys()
+            fields = imagesFile.keys()
             if 'stimulus' in fields:
                 images = imagesFile['stimulus']['images']
             elif 'images' in fields:
@@ -89,7 +90,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             else:
                 die('Neither stimulus or images fields found on image file')
 
-            note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
+            note(
+                f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
 
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
@@ -108,12 +110,14 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                 idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
 
             oStimVid = images[:, :, seq[idx] - 1]
-            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
+            note(
+                f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
 
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:, :, int(prescan / tr):]
-                note(f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
+                note(
+                    f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
 
             # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float64'), np.eye(4))
@@ -139,13 +143,14 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                                             f'sub-{sub}', f'ses-{ses}', '*_params.mat')))
 
             for logP in logPs:
-                stim  = loadmat(logP, simplify_cells=True)['LoadStimName']
+                stim = loadmat(logP, simplify_cells=True)['LoadStimName']
                 stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim + '.mat')
-                task  = logP.split('task-')[-1].split('_run')[0]
-                run   = logP.split('run-')[-1].split('_')[0]
+                task = logP.split('task-')[-1].split('_run')[0]
+                run = logP.split('run-')[-1].split('_')[0]
 
                 makedirs(path.join(outPET, 'stimuli'), exist_ok=True)
-                oFname = path.join(outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
+                oFname = path.join(outPET, 'stimuli',
+                                   f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
                 gazeFile = path.join(bidsDir, 'sourcedata', 'etdata', f'sub-{sub}', f'ses-{ses}',
                                      f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_gaze.mat')
 
@@ -163,23 +168,26 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                     paramsFile = loadmat(logP, simplify_cells=True)
 
                     # get all values necessary
-                    seq       = imagesFile['stimulus']['seq']
+                    seq = imagesFile['stimulus']['seq']
                     seqTiming = imagesFile['stimulus']['seqtiming']
-                    images    = imagesFile['stimulus']['images']
-                    tr        = paramsFile['params']['tr']
+                    images = imagesFile['stimulus']['images']
+                    tr = paramsFile['params']['tr']
 
                     # build and binarise the stimulus
                     stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
                     images[images != stimImagesU[np.argmax(stimImagesUC)]] = 1
                     images[images == stimImagesU[np.argmax(stimImagesUC)]] = 0
-                    oStimVid  = images[:, :, seq[::int(1 / seqTiming[1] * tr)] - 1]  # 8Hz flickering * 2s TR
+                    # 8Hz flickering * 2s TR
+                    oStimVid = images[:, :, seq[::int(1 / seqTiming[1] * tr)] - 1]
 
                     # load the gaze file and do the gaze correction
                     gaze = loadmat(gazeFile, simplify_cells=True)
 
                     # get rid of out of image data (loss of tracking)
-                    gaze['x'][np.any((gaze['x'] == 0, gaze['x'] == 1280), 0)] = 1280 / 2  # 1280 comes from resolution of screen
-                    gaze['y'][np.any((gaze['y'] == 0, gaze['y'] == 1024), 0)] = 1024 / 2  # 1024 comes from resolution of screen
+                    gaze['x'][np.any((gaze['x'] == 0, gaze['x'] == 1280), 0)] = 1280 / \
+                        2  # 1280 comes from resolution of screen
+                    gaze['y'][np.any((gaze['y'] == 0, gaze['y'] == 1024), 0)] = 1024 / \
+                        2  # 1024 comes from resolution of screen
                     # TODO: load the resolution from the _params.mat file?
 
                     # resamplet to TR
@@ -201,7 +209,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
                     # shift the stimulus opposite of gaze direction
                     for i in range(len(x)):
-                        oStimVid[..., i] = shift(oStimVid[..., i], (-y[i], -x[i]), mode='constant', cval=0)
+                        oStimVid[..., i] = shift(
+                            oStimVid[..., i], (-y[i], -x[i]), mode='constant', cval=0)
 
                     # save the stimulus as nifti
                     img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float64'), np.eye(4))
