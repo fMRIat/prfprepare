@@ -8,9 +8,10 @@
 # 1.0.3 added info in the maskinfo.json; bugfixes
 # 1.0.4 add option for all subs; fix bug when only doing one session
 # 1.0.5 fixed stimulus creation?; options for averaging; do not average tasks with single runs; small fixes
+# 1.0.6 do not average tasks with single runs; fix problem where it could not find the aperture; bugfixes and style improvements
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.0.5
+VERSION=1.0.6
 docker build --tag $ME/$GEAR:$VERSION .
 
