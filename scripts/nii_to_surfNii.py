@@ -221,10 +221,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         # load the .gii in fsnative
                         if fmriprepLegacyLayout:
                             giiP = path.join(
-                                funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
                         else:
                             giiP = path.join(
-                                funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                                funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
 
                         # get the vertices data
                         vertices = nib.load(giiP).agg_data()
@@ -238,10 +238,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         for r in runsOrig:
                             if fmriprepLegacyLayout:
                                 giiP = path.join(
-                                    funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                    funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
                             else:
                                 giiP = path.join(
-                                    funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r:01d}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                                    funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
 
                             gii.append(nib.load(giiP).agg_data())
                         if len(gii) > 1:
@@ -262,9 +262,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile),
                                          simplify_cells=True)
                     else:
-                        if not 'av' in str(run):
+                        if 'av' not in str(run):
                             params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
-                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_params.mat'),
+                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat'),
                                              simplify_cells=True)
                         else:
                             params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
@@ -280,7 +280,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # create and save new nii img
                     try:
                         apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
-                        stimNii = nib.load(apertures[[f'task-{task}' in ap for ap in apertures]].item())
+                        stimNii = nib.load(apertures[[f'task-{task}_' in ap for ap in apertures]].item())
                     except:
                         print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
                         continue
