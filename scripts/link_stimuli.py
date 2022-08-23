@@ -39,7 +39,7 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
 
             apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*.nii.gz')))
             try:
-                stimName = apertures[[f'task-{task}' in ap for ap in apertures]].item()
+                stimName = apertures[[f'task-{task}_' in ap for ap in apertures]].item()
             except:
                 continue
 
@@ -81,7 +81,7 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
                                            f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv')
 
                         stimNameET = path.join(
-                            outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run:02d}_apertures.nii.gz')
+                            outPET, 'stimuli', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_apertures.nii.gz')
 
                         if not path.isfile(newTSV) or force:
                             if not path.isfile(stimNameET):
