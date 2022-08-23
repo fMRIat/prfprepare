@@ -45,7 +45,7 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
 
             runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
             # adapt for averaged runs
-            if average:
+            if average and len(runs) > 1:
                 if output_only_average:
                     runs = [''.join(map(str, runs)) + 'avg']
                 else:
@@ -71,7 +71,7 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
 
                 # create events.tsv for ET corr
                 if etcorr:
-                    if average:
+                    if average and len(runs) > 1:
                         die('We can not do eyetracker correction on averaged runs!')
 
                     outPET = outP.replace('/sub-', '_ET/sub-')
