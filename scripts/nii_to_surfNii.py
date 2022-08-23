@@ -168,7 +168,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             runs = layout.get(subject=sub, session=ses, task=task,
                                               return_type='id', target='run')
                             # adapt for averaged runs
-                            if average:
+                            if average and len(runs) > 1:
                                 if output_only_average:
                                     runs = [''.join(map(str, runs)) + 'avg']
                                 else:
@@ -203,7 +203,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             for task in tasks:
                 runs = layout.get(subject=sub, session=ses, task=task, return_type='id', target='run')
                 # adapt for averaged runs
-                if average:
+                if average and len(runs) > 1:
                     runsOrig = copy.copy(runs)
                     if output_only_average:
                         runs = [''.join(map(str, runs)) + 'avg']
@@ -275,7 +275,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     tr = params['params']['tr']
 
                     if prescan > 0:
-                        vertices = vertices[:, int(prescan/tr):]
+                        vertices = vertices[:, int(prescan / tr):]
 
                     # create and save new nii img
                     try:
