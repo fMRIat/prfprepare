@@ -120,7 +120,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                     f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
 
             # save the stimulus as nifti
-            img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float64'), np.eye(4))
+            img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float32'), np.eye(4))
             img.header['pixdim'][1:5] = [1, 1, 1, tr]
             img.header['qoffset_x'] = img.header['qoffset_y'] = img.header['qoffset_z'] = 1
             img.header['cal_max'] = 1
@@ -213,7 +213,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                             oStimVid[..., i], (-y[i], -x[i]), mode='constant', cval=0)
 
                     # save the stimulus as nifti
-                    img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float64'), np.eye(4))
+                    img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float32'), np.eye(4))
                     img.header['pixdim'][1:5] = [1, 1, 1, tr]
                     img.header['qoffset_x'] = img.header['qoffset_y'] = img.header['qoffset_z'] = 1
                     img.header['cal_max'] = 1
