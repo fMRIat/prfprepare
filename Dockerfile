@@ -7,16 +7,16 @@
 # Example usage:
 #   docker run -v /path/to/your/subject:/input scitran/freesurfer-recon-all
 #
-FROM ubuntu:xenial
+FROM ubuntu:focal
 
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0
 RUN mkdir -p ${FLYWHEEL}
 WORKDIR ${FLYWHEEL}
 
-
-RUN apt-get update --fix-missing \
- && apt-get install -y wget bzip2 ca-certificates \
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update --fix-missing \
+ && apt install -y wget bzip2 ca-certificates \
       libglib2.0-0 \
       libxext6 \
       libsm6 \
@@ -32,11 +32,10 @@ RUN apt-get update --fix-missing \
       g++ \
       libeigen3-dev \
       zlib1g-dev \
-      libqt4-opengl-dev \
       libgl1-mesa-dev \
       libfftw3-dev \
       libtiff5-dev
-RUN apt-get install -y \
+RUN apt install -y \
       libxt6 \
       libxcomposite1 \
       libfontconfig1 \
@@ -47,17 +46,17 @@ RUN apt-get install -y \
       unzip \
       tcsh \
       libgomp1 \
-      python-pip \ 
+      python3-pip \
       perl-modules
-      
-#################################### 
+
+####################################
 
 
 
 ############################
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y \
+RUN apt update && apt install -y \
     xvfb \
     xfonts-100dpi \
     xfonts-75dpi \
@@ -66,15 +65,12 @@ RUN apt-get update && apt-get install -y \
     imagemagick \
     wget \
     subversion\
-    vim \
-    bsdtar 
+    vim
 
 
 
 # Download Freesurfer dev from MGH and untar to /opt
-RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.1.1/freesurfer-linux-centos6_x86_64-7.1.1.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
-
-
+RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-ubuntu20_amd64-7.3.2.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
 ENV FREESURFER_HOME /opt/freesurfer
 
 
@@ -97,13 +93,13 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86
 ENV PATH=$CONDA_DIR/bin:$PATH
 
 RUN conda update -n base -c defaults conda
- 
+
 # install conda env
 COPY conda_config/scientific.yml .
 RUN conda env create -f scientific.yml
- 
 
-RUN apt-get update && apt-get install -y jq
+
+RUN apt update && apt install -y jq
 
 
 # Make directory for flywheel spec (v0)
@@ -113,7 +109,7 @@ RUN mkdir -p ${FLYWHEEL}
 # Copy and configure run script and metadata code
 COPY bin/run \
 	bin/run.py \
-	scripts/stim_as_nii.py    \ 
+	scripts/stim_as_nii.py    \
 	scripts/nii_to_surfNii.py \
 	scripts/link_stimuli.py    \
       ${FLYWHEEL}/
@@ -122,14 +118,14 @@ COPY bin/run \
 RUN chmod +x \
       ${FLYWHEEL}/run \
       ${FLYWHEEL}/run.py \
-	${FLYWHEEL}/stim_as_nii.py    \ 
+	${FLYWHEEL}/stim_as_nii.py    \
 	${FLYWHEEL}/nii_to_surfNii.py \
-	${FLYWHEEL}/link_stimuli.py    
+	${FLYWHEEL}/link_stimuli.py
 WORKDIR ${FLYWHEEL}
 # Run the run.sh script on entry.
 ENTRYPOINT ["/flywheel/v0/run"]
 
-#make it work under singularity 
-# RUN ldconfig: it fails in BCBL, check Stanford 
-#https://wiki.ubuntu.com/DashAsBinSh 
+#make it work under singularity
+# RUN ldconfig: it fails in BCBL, check Stanford
+#https://wiki.ubuntu.com/DashAsBinSh
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
