@@ -92,7 +92,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
     nifti file belongs to the ROI and which indicices in fs space correspond.
 
     Additionally the first timepoints are removed as defined in PrescanDuration
-    in the _params.mat file.
+    as well as startScan in the _params.mat file.
     '''
 
     def note(*args):
@@ -256,7 +256,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # apply the combined ROI mask
                     vertices = vertices[allROImask, :]
 
-                    # get rid of volumes before stimulus actually started (prescanDuration)
+                    # get rid of volumes where the stimulus showed only blank (prescanDuration)
                     if forceParams:
                         paramsFile, task = forceParams
                         params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile),
@@ -276,6 +276,13 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                     if prescan > 0:
                         vertices = vertices[:, int(prescan / tr):]
+
+                    # remove volumes the stimulus was wating to start (startScan)
+                    startScan = params['params']['startScan']
+
+                    if startScan  > 0:
+                        vertices = vertices[:, int(startScan / tr):]
+
 
                     # create and save new nii img
                     try:

@@ -81,6 +81,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             seq = paramsFile['stimulus']['seq']
             tr = paramsFile['params']['tr']
             prescan = paramsFile['params']['prescanDuration']
+
             # There are projects with 'images' directly or 'stimulus.images', check both
             fields = imagesFile.keys()
             if 'stimulus' in fields:
