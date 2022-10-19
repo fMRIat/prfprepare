@@ -19,11 +19,11 @@ import sys
 def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, force, verbose):
     '''
     Here the stimuli as shown to the subject will be saved as binarised version
-    into nifti files for the analysis. We find the stimuli in the _params.mat 
+    into nifti files for the analysis. We find the stimuli in the _params.mat
     files. Per stimulus only one file will be saved.
     If we wanna do eyetracker correction we read the _gaze.mat file and shift
-    the stimulus in the opposite direction as the subject was looking. This 
-    will allow for a better model creation during the analysis when we had 
+    the stimulus in the opposite direction as the subject was looking. This
+    will allow for a better model creation during the analysis when we had
     gaze instabilities. This will need for stimulus files specific for
     sub,ses,task,run!
     '''
@@ -81,6 +81,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             seq = paramsFile['stimulus']['seq']
             tr = paramsFile['params']['tr']
             prescan = paramsFile['params']['prescanDuration']
+
             # There are projects with 'images' directly or 'stimulus.images', check both
             fields = imagesFile.keys()
             if 'stimulus' in fields:
@@ -90,8 +91,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             else:
                 die('Neither stimulus or images fields found on image file')
 
-            note(
-                f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
+            note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
 
             # build and binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
@@ -110,17 +110,19 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                 idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
 
             oStimVid = images[:, :, seq[idx] - 1]
-            note(
-                f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
+            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
 
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:, :, int(prescan / tr):]
-                note(
-                    f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
+                note(f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
 
             # save the stimulus as nifti
+<<<<<<< HEAD
             img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float32'), np.eye(4))
+=======
+            img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float18'), np.eye(4))
+>>>>>>> 107642e2229a9b056f94d7eb0cef0effbc758169
             img.header['pixdim'][1:5] = [1, 1, 1, tr]
             img.header['qoffset_x'] = img.header['qoffset_y'] = img.header['qoffset_z'] = 1
             img.header['cal_max'] = 1

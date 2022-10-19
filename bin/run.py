@@ -15,6 +15,7 @@ import sys
 from os import path
 from neuropythy.commands import atlas
 import bids
+import collections
 import glob as glob
 
 # for the annots part
@@ -27,45 +28,108 @@ from zipfile import ZipFile
 flywheelBase = '/flywheel/v0'
 sys.path.insert(0, flywheelBase)
 
-
 configFile = path.join(flywheelBase, 'config.json')
 bidsDir = path.join(flywheelBase, 'BIDS')
+
+
+# updates nested dicts
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+
+# turns a list within a string to a list of strings
+def listFromStr(s):
+    return s.split(']')[0].split('[')[-1].split(',')
+
+
+#  turns the config entry to a loopable list
+def config2list(c, b=None):
+    if b is not None:
+        if 'all' in c:
+            l = b
+        else:
+            if isinstance(c, list):
+                l = c
+            else:
+                l = listFromStr(c)
+    else:
+        if isinstance(c, str):
+            try:
+                l = [float(a) for a in listFromStr(c)]
+            except:
+                l = listFromStr(c)
+        elif isinstance(c, list):
+            l = [float(a) for a in c]
+        elif isinstance(c, float) or isinstance(c, bool) or isinstance(c, int):
+            l = [c]
+
+    l.sort()
+
+    return l
+
+
+################################################
+# define de default config
+defaultConfig = {
+    'subjects'                 : 'all',
+    'sessions'                 : 'all',
+    'fs_annot'                : '',
+    'fs_annot_ids'            : '',
+    'etcorrection'            : False,
+    'force'                   : False,
+    'custom_output_name'      : '',
+    'fmriprep_legacy_layout'  : False,
+    'forceParams'             : '',
+    'use_numImages'           : False,
+    'config': {
+        'average_runs'        : False,
+        'output_only_average' : False,
+        'rois'                : 'all',
+        'atlases'             : 'all',
+        'fmriprep_analysis'   : '01',
+ 	},
+    'verbose'                 : True,
+}
 
 
 def die(*args):
     print(*args)
     sys.exit(1)
 
+################################################
+# load in the config json and update the config dict
+try:
+    with open(configFile, 'r') as fl:
+        jsonConfig = json.load(fl)
+    config = update(defaultConfig, jsonConfig)
+except Exception:
+    die('Could not read config.json!')
+
+verbose = config['verbose']
+force = config['force']
 
 def note(*args):
     if verbose:
         print(*args)
     return None
 
+note('Following configuration is used:')
+note(json.dumps(config, indent=4))
 
-try:
-    with open(configFile, 'r') as fl:
-        conf = json.load(fl)
-except Exception:
-    die('Could not read config.json!')
-
+# get the BIDS layout
 layout = bids.BIDSLayout(bidsDir)
-BIDSsubs = layout.get(return_type='id', target='subject')
-verbose = conf['verbose']
-force = conf['force']
 
 # subject from config and check
-if 'subject' in conf.keys():
-    s = conf['subject'].split(']')[0].split('[')[-1].split(',')
-    if s[0] == 'all':
-        subs = BIDSsubs
-    else:
-        subs = s
-else:
-    subs = BIDSsubs
+BIDSsubs = layout.get(return_type='id', target='subject')
+subs = config2list(config['subjects'], BIDSsubs)
 
-subs.sort()
 
+################################################
 # loop over subjects
 for sub in subs:
 
@@ -75,25 +139,11 @@ for sub in subs:
 
     # session if given otherwise it will loop through sessions from BIDS
     BIDSsess = layout.get(subject=sub, return_type='id', target='session')
-    if 'session' in conf.keys():
-        ss = conf['session'].split(']')[0].split('[')[-1].split(',')
-        if ss[0] == 'all':
-            sess = BIDSsess
-        else:
-            sess = ss
-    else:
-        sess = BIDSsess
-
-    sess.sort()
+    sess = config2list(config['sessions'], BIDSsess)
 
     # ROIs and atlases from config
-    if 'rois' not in conf['config'].keys():
-        conf['config']['rois'] = 'all'
-    areas = conf['config']['rois'].split(']')[0].split('[')[-1].split(',')
-
-    if 'atlases' not in conf['config'].keys():
-        conf['config']['atlases'] = 'all'
-    atlases = conf['config']['atlases'].split(']')[0].split('[')[-1].split(',')
+    areas   = config2list(config['config']['rois'])
+    atlases = config2list(config['config']['atlases'])
     if atlases[0] == 'all':
         atlases = ['benson', 'wang']
 
@@ -101,8 +151,8 @@ for sub in subs:
     # !!! maybe we should define an atlas called fs_annot or fs_custom and
     #    the IDs could go in the rois field in the config?
     #    Or are there other fs_annots possible?
-    fs_annot = conf['fs_annot']
-    fs_annot_ids = conf['fs_annot_ids'].split(']')[0].split('[')[-1].split(',')
+    fs_annot = config['fs_annot']
+    fs_annot_ids = config['fs_annot_ids'].split(']')[0].split('[')[-1].split(',')
 
     if fs_annot == 'custom.zip':
         # If it is custom, it meand that there will be a file called custom.zip in
@@ -115,36 +165,26 @@ for sub in subs:
         convert_custom_annot = False
 
     # get additional prams from config.json
-    customName = conf['custom_output_name'] if 'custom_output_name' in conf.keys() else False
-    if customName == ['']:
+    customName = config2list(config['custom_output_name'])[0]
+    if customName == '':
         customName = False
 
-    etcorr = conf['etcorrection'] if 'etcorrection' in conf.keys() else False
+    etcorr = config2list(config['etcorrection'])[0]
 
-    use_numImages = conf['use_numImages'] if 'use_numImages' in conf.keys() else True
+    use_numImages = config2list(config['use_numImages'])[0]
     note(f'[run.py] use_numImages is: {use_numImages}')
 
-    fmriprepLegacyLayout = conf['fmriprep_legacy_layout'] if 'fmriprep_legacy_layout' in conf.keys(
-    ) else False
+    fmriprepLegacyLayout = config2list(config['fmriprep_legacy_layout'])[0]
 
-    if 'forceParams' in conf.keys():
-        forceParams = (conf['forceParams'].split(']')[0].split('[')[-1].split(','))
-    else:
-        forceParams = False
+    forceParams = config2list(config['forceParams'])
     if forceParams == ['']:
         forceParams = False
 
-    if 'average_runs' not in conf['config'].keys():
-        conf['config']['average_runs'] = False
-    average = conf['config']['average_runs']
+    average = config2list(config['config']['average_runs'])[0]
 
-    if 'output_only_average' not in conf['config'].keys() or average is False:
-        conf['config']['output_only_average'] = False
-    output_only_average = conf['config']['output_only_average']
+    output_only_average = config2list(config['config']['output_only_average'])[0]
 
-    if 'fmriprep_analysis' not in conf['config'].keys():
-        conf['config']['fmriprep_analysis'] = '01'
-    fmriprepAnalysis = conf['config']['fmriprep_analysis']
+    fmriprepAnalysis = f"{int(config2list(config['config']['fmriprep_analysis'])[0]):02d}"
 
     # define input direcotry
     inDir = path.join(flywheelBase, 'input', f'analysis-{fmriprepAnalysis}')
@@ -155,7 +195,7 @@ for sub in subs:
         die('no BIDS directory found!')
 
     # define and check subject and freesurfer dir
-    if conf['fmriprep_legacy_layout'] is True:
+    if config['fmriprep_legacy_layout'] is True:
         subInDir = path.join(inDir, 'fmriprep', f'sub-{sub}')
         fsDir = path.join(inDir, 'freesurfer')
     else:
@@ -185,7 +225,7 @@ for sub in subs:
                 opts = json.load(fl)
 
             # check for the options file equal to the config
-            if sorted(opts.items()) == sorted(conf['config'].items()):
+            if sorted(opts.items()) == sorted(config['config'].items()):
                 found_outbids_dir = True
 
         # when we could not find a fitting analysis-XX forlder we make a new one
@@ -195,7 +235,7 @@ for sub in subs:
 
             # dump the options file in the output directory
             with open(optsFile, 'w') as fl:
-                json.dump(conf['config'], fl, indent=4)
+                json.dump(config['config'], fl, indent=4)
             found_outbids_dir = True
 
     note(f'Output directory: {outDir}')

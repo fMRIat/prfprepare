@@ -9,9 +9,11 @@
 # 1.0.4 add option for all subs; fix bug when only doing one session
 # 1.0.5 fixed stimulus creation?; options for averaging; do not average tasks with single runs; small fixes
 # 1.0.6 do not average tasks with single runs; fix problem where it could not find the aperture; bugfixes and style improvements
+# 1.1.0 style fixes, update to python 3.10, freesurfer to 7.3.2, base docker ubuntu 20.04
+# 1.1.1 implemented startScan variable additional to prescanDuration
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.0.6
-docker build --tag $ME/$GEAR:$VERSION .
+VERSION=1.1.1
+docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
