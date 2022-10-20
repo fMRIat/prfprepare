@@ -275,12 +275,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     tr = params['params']['tr']
 
                     if prescan > 0:
+                        note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
                         vertices = vertices[:, int(prescan / tr):]
 
                     # remove volumes the stimulus was wating to start (startScan)
                     startScan = params['params']['startScan']
 
                     if startScan  > 0:
+                        note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
                         vertices = vertices[:, int(startScan / tr):]
 
 
