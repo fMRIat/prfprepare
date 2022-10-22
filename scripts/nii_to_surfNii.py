@@ -47,6 +47,8 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
         if rois[0] == 'all':
             rois = labelNames
 
+        atlasName = atlas
+
     elif atlas == 'wang':
         areasP = path.join(fsDir, f'sub-{sub}', 'surf', f'{hemi}h.wang15_mplbl.mgz')
         if not path.exists(areasP):
@@ -66,15 +68,32 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
         if rois[0] == 'all':
             rois = labelNames[1:]
 
+        atlasName = atlas
+
+    elif 'annot' in atlas:
+        if hemi+'h.' in atlas:
+            annotP = path.join(fsDir, f'sub-{sub}', 'customLabel', atlas)
+
+            a,c,l = nib.freesurfer.io.read_annot(annotP)
+            areas = a + 1
+            areaLabels = {'Unknown':0} | {l[k].decode('utf-8'): k for k in range(len(l))}
+
+            if rois[0] == 'all':
+                rois = list(areaLabels.keys())[1:]
+
+            atlasName = atlas.split('.')[1]
+        else:
+            return [], [], [], []
+
     elif atlas in ['none', 'fullBrain']:
         labelNames = 'fullBrain'
         areaLabels = {'fullBrain': -1}
         rois = ['fullBrain']
 
     else:
-        die('You specified a wrong atlas, please choose from [benson, wang]!')
+        die('You specified a wrong atlas, please choose from [benson, wang, fs_custom]!')
 
-    return areas, areaLabels, rois
+    return areas, areaLabels, rois, atlasName
 
 
 ###############################################################################
@@ -113,7 +132,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
         # loop over all defined atlases
         for atlas in atlases:
             # load in the atlas
-            areas, areaLabels, rois = load_atlas(atlas, fsDir, sub, hemi, roisIn)
+            areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn)
 
             # go for all given ROIs
             for roi in rois:
@@ -139,7 +158,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
         # loop over all defined atlases
         for atlas in atlases:
             # load in the atlas
-            areas, areaLabels, rois = load_atlas(atlas, fsDir, sub, hemi, roisIn)
+            areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn)
 
             # go for all given ROIs
             for roi in rois:
@@ -179,8 +198,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                         # define the json  for this specific atlas-roi combi for one subject and session
                         jsonP = path.join(
-                            funcOutP, f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlas}_maskinfo.json')
-                        jsonI = {'atlas': atlas,
+                            funcOutP, f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
+                        jsonI = {'atlas': atlasName,
                                  'roi': roi,
                                  'hemisphere': hemi,
                                  'thisHemiSize': int(allROImask.sum()),
