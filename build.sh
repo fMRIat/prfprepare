@@ -11,9 +11,10 @@
 # 1.0.6 do not average tasks with single runs; fix problem where it could not find the aperture; bugfixes and style improvements
 # 1.1.0 style fixes, update to python 3.10, freesurfer to 7.3.2, base docker ubuntu 20.04
 # 1.1.1 implemented startScan variable additional to prescanDuration
+# 1.2.0 implemented custom annots
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.1.1
+VERSION=1.2.0
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
