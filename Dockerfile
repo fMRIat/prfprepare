@@ -74,13 +74,6 @@ RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/free
 ENV FREESURFER_HOME /opt/freesurfer
 
 
-###########################
-# Instal neurodebian, I don't know if it is required anymore or not...
-# ( I will skip it for now)
-
-
-
-
 
 
 ############################
