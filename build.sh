@@ -12,9 +12,10 @@
 # 1.1.0 style fixes, update to python 3.10, freesurfer to 7.3.2, base docker ubuntu 20.04
 # 1.1.1 implemented startScan variable additional to prescanDuration
 # 1.2.0 implemented custom annots
+# 1.2.1 speedup with large stimulus files, force load in seq as int
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.2.0
+VERSION=1.2.1
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 

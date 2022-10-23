@@ -290,19 +290,25 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                                        f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'),
                                              simplify_cells=True)
 
-                    prescan = params['params']['prescanDuration']
                     tr = params['params']['tr']
 
-                    if prescan > 0:
-                        note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
-                        vertices = vertices[:, int(prescan / tr):]
+                    if 'prescanDuration' in params['params'].keys():
+                        prescan = params['params']['prescanDuration']
+
+                        if prescan > 0:
+                            note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
+                            vertices = vertices[:, int(prescan / tr):]
+
+                    else:
+                        prescan = 0
 
                     # remove volumes the stimulus was wating to start (startScan)
-                    startScan = params['params']['startScan']
+                    if 'startScan' in params['params'].keys():
+                        startScan = params['params']['startScan']
 
-                    if startScan  > 0:
-                        note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
-                        vertices = vertices[:, int(startScan / tr):]
+                        if startScan  > 0:
+                            note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
+                            vertices = vertices[:, int(startScan / tr):]
 
 
                     # create and save new nii img
@@ -317,8 +323,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # scanner was running for longer than the task and is topped manually
                     stimLength = stimNii.shape[-1]
                     if vertices.shape[1] < stimLength:
-                        die(f'For {path.basename(newNiiP)} the data after removing prescanDuration ({prescan}s) '
-                            f'is shorter than the simulus file ({vertices.shape[1]}<{stimLength})')
+                        die(f'For {path.basename(newNiiP)} the data is shorter than '
+                            F'the simulus file ({vertices.shape[1]}<{stimLength})')
                     elif vertices.shape[1] > stimLength:
                         vertices = vertices[:, :stimLength]
                     else:
