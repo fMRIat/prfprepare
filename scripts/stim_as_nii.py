@@ -75,12 +75,15 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
             # loat the mat files defining the stimulus
             imagesFile = loadmat(stimP, simplify_cells=True)
-            paramsFile = loadmat(logP, simplify_cells=True)
+            params = loadmat(logP, simplify_cells=True)
 
             # get all values necessary
-            seq = paramsFile['stimulus']['seq'].astype(int)
-            tr = paramsFile['params']['tr']
-            prescan = paramsFile['params']['prescanDuration']
+            seq = params['stimulus']['seq'].astype(int)
+            tr = params['params']['tr']
+            if 'prescanDuration' in params['params']:
+                prescan = params['params']['prescanDuration']
+            else:
+                prescan = 0
 
             # There are projects with 'images' directly or 'stimulus.images', check both
             fields = imagesFile.keys()
@@ -97,12 +100,12 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             # create it from frames
             if use_numImages:
                 # load in the numImages
-                numImages = paramsFile['params']['numImages']
+                numImages = params['params']['numImages']
                 idx = np.linspace(0, len(seq) - 1, int(numImages + prescan / tr), dtype=int)
             else:
                 note('Using seqtiming')
                 # calculate the numImages from seqTiming
-                seqTiming = paramsFile['stimulus']['seqtiming']
+                seqTiming = params['stimulus']['seqtiming']
                 numImages = len(seq) * seqTiming[1] / tr
                 idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
 
@@ -166,29 +169,27 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
                     # loat the mat files defining the stimulus
                     imagesFile = loadmat(stimP, simplify_cells=True)
-                    paramsFile = loadmat(logP, simplify_cells=True)
+                    params = loadmat(logP, simplify_cells=True)
 
                     # get all values necessary
                     seq = imagesFile['stimulus']['seq']
                     seqTiming = imagesFile['stimulus']['seqtiming']
                     images = imagesFile['stimulus']['images']
-                    tr = paramsFile['params']['tr']
+                    tr = params['params']['tr']
 
                     # build and binarise the stimulus
                     stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
                     images[images != stimImagesU[np.argmax(stimImagesUC)]] = 1
                     images[images == stimImagesU[np.argmax(stimImagesUC)]] = 0
-                    # 8Hz flickering * 2s TR
+
                     oStimVid = images[:, :, seq[::int(1 / seqTiming[1] * tr)] - 1]
 
                     # load the gaze file and do the gaze correction
                     gaze = loadmat(gazeFile, simplify_cells=True)
 
                     # get rid of out of image data (loss of tracking)
-                    gaze['x'][np.any((gaze['x'] == 0, gaze['x'] == 1280), 0)] = 1280 / \
-                        2  # 1280 comes from resolution of screen
-                    gaze['y'][np.any((gaze['y'] == 0, gaze['y'] == 1024), 0)] = 1024 / \
-                        2  # 1024 comes from resolution of screen
+                    gaze['x'][np.any((gaze['x'] == 0, gaze['x'] == 1280), 0)] = 1280 / 2  # 1280 comes from resolution of screen
+                    gaze['y'][np.any((gaze['y'] == 0, gaze['y'] == 1024), 0)] = 1024 / 2  # 1024 comes from resolution of screen
                     # TODO: load the resolution from the _params.mat file?
 
                     # resamplet to TR
