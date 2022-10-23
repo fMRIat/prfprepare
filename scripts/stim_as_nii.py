@@ -56,7 +56,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
     # go through all param files and creat stimuli from them
     for logP in logPs:
-        stim = loadmat(logP, simplify_cells=True)['params']['loadMatrix'].split('/')[-1].split('\\')[-1]
+        stim  = path.basename(loadmat(logP, simplify_cells=True)['params']['loadMatrix'])
         stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
 
         if not forceParams:
@@ -66,8 +66,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         makedirs(path.join(outP, 'stimuli'), exist_ok=True)
         oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
 
-        note(
-            f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, task is {task}, output file will be {oFname}')
+        note(f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, '
+             'task is {task}, output file will be {oFname}')
 
         if not path.isfile(oFname) or force:
             if not path.isfile(stimP):
@@ -78,7 +78,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             paramsFile = loadmat(logP, simplify_cells=True)
 
             # get all values necessary
-            seq = paramsFile['stimulus']['seq']
+            seq = paramsFile['stimulus']['seq'].astype(int)
             tr = paramsFile['params']['tr']
             prescan = paramsFile['params']['prescanDuration']
 
@@ -91,11 +91,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             else:
                 die('Neither stimulus or images fields found on image file')
 
-            note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, images.shape: {images.shape}')
-
-            # build and binarise the stimulus
-            stimImagesU, stimImagesUC = np.unique(images, return_counts=True)
-            images = np.where(images == stimImagesU[np.argmax(stimImagesUC)], 0, 1)
+            note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, '
+                 'images.shape: {images.shape}')
 
             # create it from frames
             if use_numImages:
@@ -103,19 +100,25 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                 numImages = paramsFile['params']['numImages']
                 idx = np.linspace(0, len(seq) - 1, int(numImages + prescan / tr), dtype=int)
             else:
-                print('Using seqtiming')
+                note('Using seqtiming')
                 # calculate the numImages from seqTiming
                 seqTiming = paramsFile['stimulus']['seqtiming']
                 numImages = len(seq) * seqTiming[1] / tr
                 idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
 
             oStimVid = images[:, :, seq[idx] - 1]
-            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, oStimVid.shape: {oStimVid.shape}')
+            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, '
+                 'oStimVid.shape: {oStimVid.shape}')
 
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:, :, int(prescan / tr):]
-                note(f'Prescan = {prescan}, removing volumes at the beginning, now oStimVid.shape: {oStimVid.shape}')
+                note(f'Prescan = {prescan}, removing volumes at the beginning, now '
+                     'oStimVid.shape: {oStimVid.shape}')
+
+            #  binarise the stimulus
+            stimImagesU, stimImagesUC = np.unique(oStimVid, return_counts=True)
+            oStimVid = np.where(oStimVid == stimImagesU[np.argmax(stimImagesUC)], 0, 1)
 
             # save the stimulus as nifti
             img = nib.Nifti1Image(oStimVid[:, :, None, :].astype('float32'), np.eye(4))
