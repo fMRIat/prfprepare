@@ -67,7 +67,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         oFname = path.join(outP, 'stimuli', f'task-{task}_apertures.nii.gz')
 
         note(f'[stim_as_nii.py] Now working with params: {logP} and images file {stimP}, '
-             'task is {task}, output file will be {oFname}')
+             f'task is {task}, output file will be {oFname}')
 
         if not path.isfile(oFname) or force:
             if not path.isfile(stimP):
@@ -95,7 +95,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                 die('Neither stimulus or images fields found on image file')
 
             note(f'Read params: seq.shape {seq.shape}, tr: {tr}, prescan: {prescan}, '
-                 'images.shape: {images.shape}')
+                 f'images.shape: {images.shape}')
 
             # create it from frames
             if use_numImages:
@@ -111,13 +111,13 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
             oStimVid = images[:, :, seq[idx] - 1]
             note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, '
-                 'oStimVid.shape: {oStimVid.shape}')
+                 f'oStimVid.shape: {oStimVid.shape}')
 
             # remove prescanDuration from stimulus
             if prescan > 0:
                 oStimVid = oStimVid[:, :, int(prescan / tr):]
                 note(f'Prescan = {prescan}, removing volumes at the beginning, now '
-                     'oStimVid.shape: {oStimVid.shape}')
+                     f'oStimVid.shape: {oStimVid.shape}')
 
             #  binarise the stimulus
             stimImagesU, stimImagesUC = np.unique(oStimVid, return_counts=True)

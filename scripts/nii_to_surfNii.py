@@ -76,7 +76,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois):
 
             a,c,l = nib.freesurfer.io.read_annot(annotP)
             areas = a + 1
-            areaLabels = {'Unknown':0} | {l[k].decode('utf-8'): k for k in range(len(l))}
+            areaLabels = {'Unknown':0} | {l[k].decode('utf-8'): k+1 for k in range(len(l))}
 
             if rois[0] == 'all':
                 rois = list(areaLabels.keys())[1:]
