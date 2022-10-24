@@ -64,7 +64,10 @@ def config2list(c, b=None):
             except:
                 l = listFromStr(c)
         elif isinstance(c, list):
-            l = [float(a) for a in c]
+            try:
+               l = [float(a) for a in c]
+            except:
+                l = c
         elif isinstance(c, float) or isinstance(c, bool) or isinstance(c, int):
             l = [c]
 
