@@ -331,8 +331,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         pass
 
                     # save the new nifti
-                    newNii = nib.Nifti2Image(
-                        vertices[:, None, None, :].astype('float64'), affine=np.eye(4))
+                    newNii = nib.Nifti2Image(vertices[:, None, None, :].astype('float64'), affine=np.eye(4))
                     newNii.header['pixdim'] = stimNii.header['pixdim']
                     newNii.header['qoffset_x'] = 1
                     newNii.header['qoffset_y'] = 1

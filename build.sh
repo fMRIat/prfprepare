@@ -13,9 +13,10 @@
 # 1.1.1 implemented startScan variable additional to prescanDuration
 # 1.2.0 implemented custom annots
 # 1.2.1 speedup with large stimulus files, force load in seq as int, fix when no prescan or startScan is defined
+# 1.2.2 fix for custom annots
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.2.1
+VERSION=1.2.2
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
