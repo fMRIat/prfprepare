@@ -69,11 +69,8 @@ RUN apt update && apt install -y \
 
 
 
-# Download Freesurfer dev from MGH and untar to /opt
+# Install Freesurfer
 RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-ubuntu20_amd64-7.3.2.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
-ENV FREESURFER_HOME /opt/freesurfer
-
-
 
 
 ############################
