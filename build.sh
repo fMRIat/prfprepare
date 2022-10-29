@@ -14,9 +14,10 @@
 # 1.2.0 implemented custom annots
 # 1.2.1 speedup with large stimulus files, force load in seq as int, fix when no prescan or startScan is defined
 # 1.2.2 fix for custom annots
+# 1.3.0 first implementation of volume analysis type
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.2.2
+VERSION=1.3.0
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
