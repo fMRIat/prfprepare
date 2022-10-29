@@ -238,20 +238,21 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             nib.save(resDilRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_ribbon.mgz'))
         
             allROImask = np.all((resDilRibbon.get_fdata().astype(bool), exampleBold.sum(-1)>0), 0)
+            for sesI, ses in enumerate(sess):
+                funcOutP = path.join(outP, f'ses-{ses}', 'func')
+                makedirs(funcOutP, exist_ok=True)
 
-            # define the json  for this specific atlas-roi combi for one subject and session
-            jsonP = path.join(funcOutP, 
-                        f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-volume_maskinfo.json')
-            jsonI = {'atlas': 'volume',
-                    'roi': 'volume',
-                    'hemisphere': hemi,
-                    'thisHemiSize': int(allROImask.sum()),
-                    'indBold': np.array(np.where(allROImask)).T.tolist()
-                    }
-            if len(jsonI['roiIndFsnative']) != len(jsonI['roiIndBold']):
-                die('Something wrong with the Indices!!')
-            with open(jsonP, 'w') as fl:
-                json.dump(jsonI, fl, indent=4)
+                # define the json for this specific atlas-roi combi for one subject and session
+                jsonP = path.join(funcOutP, 
+                            f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-volume_maskinfo.json')
+                jsonI = {'atlas': 'volume',
+                        'roi': 'volume',
+                        'hemisphere': hemi,
+                        'thisHemiSize': int(allROImask.sum()),
+                        'posBold': np.array(np.where(allROImask)).T.tolist()
+                        }
+                with open(jsonP, 'w') as fl:
+                    json.dump(jsonI, fl, indent=4)
         
         else:
             die(f'Your analysisSpace {analysisSpace} is not supported! '
