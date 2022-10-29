@@ -22,7 +22,6 @@ from glob import glob
 # import nibabel as nib
 import subprocess as sp
 from zipfile import ZipFile
-# import numpy as np
 
 # get all needed functions
 flywheelBase = '/flywheel/v0'
@@ -88,6 +87,7 @@ defaultConfig = {
     'forceParams'             : '',
     'use_numImages'           : False,
     'config': {
+        'analysisSpace'       : 'fsnative',
         'average_runs'        : False,
         'output_only_average' : False,
         'rois'                : 'all',
@@ -199,6 +199,8 @@ average = config2list(config['config']['average_runs'])[0]
 
 output_only_average = config2list(config['config']['output_only_average'])[0]
 
+analysisSpace = config2list(config['config']['analysisSpace'])[0]
+
 ###############################################################################
 # define the output directory automatically
 # start a new one when the config part in the .json is different
@@ -236,7 +238,7 @@ note(f'Output directory: {outDir}')
 layout = bids.BIDSLayout(bidsDir)
 
 # subject from config and check
-BIDSsubs = layout.get(return_type='id', target='subject')
+BIDSsubs = layout.get_subjects()
 subs = config2list(config['subjects'], BIDSsubs)
 
 
@@ -259,7 +261,7 @@ for sub in subs:
         die(f'No Subject in-dir found at {subInDir}!')
 
     # session if given otherwise it will loop through sessions from BIDS
-    BIDSsess = layout.get(subject=sub, return_type='id', target='session')
+    BIDSsess = layout.get_sessions(subject=sub)
     sess = config2list(config['sessions'], BIDSsess)
 
     # define the subject output dir
@@ -301,14 +303,15 @@ for sub in subs:
 
     print('Masking data with visual areas and save them to 2D nifti...')
     nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir, fsDir, forceParams,
-                   fmriprepLegacyLayout, average, output_only_average, atlases, areas, force, verbose)
+                   fmriprepLegacyLayout, average, output_only_average, atlases, areas, analysisSpace,
+                   force, verbose)
 
     # run this again with the eyetracker correction if applicable
     if etcorr:
         nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, subOutDir.replace(f'analysis-{analysis_number:02d}',
                                                                                f'analysis-{analysis_number:02d}_ET'),
                        fsDir, forceParams, fmriprepLegacyLayout, average, output_only_average,
-                       atlases, areas, force, verbose)
+                       atlases, areas, analysisSpace, force, verbose)
     # we could add some option for smoothing here?
 
     print('Creating events.tsv for the data containing the correct stimulus...')
