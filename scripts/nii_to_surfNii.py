@@ -315,7 +315,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                             # or volume file in T1 space
                             elif analysisSpace == 'volume':
-                                niiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii.gz')#'hemi-{hemi.upper()}_bold.func.gii')
+                                niiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii.gz')#'hemi-{hemi.upper()}_bold.func.gii')
 
                                 # get the data data
                                 datas.append(nib.load(niiP).get_fdata())
