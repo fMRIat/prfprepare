@@ -200,6 +200,9 @@ average = config2list(config['config']['average_runs'])[0]
 output_only_average = config2list(config['config']['output_only_average'])[0]
 
 analysisSpace = config2list(config['config']['analysisSpace'])[0]
+if analysisSpace == 'volume':
+    areas = 'all'
+    atlases = 'all'
 
 ###############################################################################
 # define the output directory automatically
