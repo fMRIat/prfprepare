@@ -249,6 +249,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                         'roi': 'volume',
                         'hemisphere': hemi,
                         'thisHemiSize': int(allROImask.sum()),
+                        'origImageSize': list(allROImask.shape),
                         'posBold': np.array(np.where(allROImask)).T.tolist()
                         }
                 with open(jsonP, 'w') as fl:
