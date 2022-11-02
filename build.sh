@@ -15,9 +15,10 @@
 # 1.2.1 speedup with large stimulus files, force load in seq as int, fix when no prescan or startScan is defined
 # 1.2.2 fix for custom annots
 # 1.3.0 first implementation of volume analysis type
+# 1.3.1 copy dataset_discription to prfprepare output
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.3.0
+VERSION=1.3.1
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
