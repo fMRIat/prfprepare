@@ -321,6 +321,8 @@ for sub in subs:
     link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average,
                  output_only_average, force, verbose)
 
+# copy the dataset_discription from fmriprep
+sp.call(f'cp {path.join(inDir,"dataset_description.json")} {outDir}', shell=True)
 
 # if defined write link for custom output folder name
 if customName:
