@@ -26,12 +26,6 @@ def die(*args):
     sys.exit(1)
 
 
-def note(*args):
-    if verbose:
-        print(*args)
-    return None
-
-
 def load_atlas(atlas, fsDir, sub, hemi, rois):
     if atlas == 'benson':
         areasP = path.join(fsDir, f'sub-{sub}', 'surf', f'{hemi}h.benson14_varea.mgz')
@@ -397,3 +391,26 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     newNii.header['cal_max'] = 1
                     newNii.header['xyzt_units'] = 10
                     nib.save(newNii, newNiiP)
+
+
+if __name__ == "__main__":
+    sub = 'S051'
+    ses = ['001']
+    baseP = '/Users/dlinhardt/Applications/develop/cluster_data'
+    bidsDir  = path.join(baseP, 'BIDS')
+    layout   = bids.BIDSLayout(bidsDir)
+    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-01', f'sub-{sub}')
+    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', 'sourcedata', 'freesurfer')
+    forceParams = ['mini_params','prf']
+    fmriprepLegacyLayout = False
+    average = True
+    output_only_average = False
+    atlases = ['benson','wang','lh.LOTS.annot','lh.litVWFA.annot','lh.motspots.annot','rh.LOTS.annot','rh.motspots.annot']
+    roisIn  = ['all']
+    analysisSpace = 'fsnative'
+    force   = False
+    verbose = True
+    nii_to_surfNii(sub, ses, layout, bidsDir, subInDir, outP, fsDir, forceParams,
+                   fmriprepLegacyLayout, average, output_only_average,
+                   atlases, roisIn, analysisSpace, force, verbose)
