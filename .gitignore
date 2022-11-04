@@ -5,3 +5,4 @@ local/
 docker.tar
 .nfs*
 *.sif
+.vscode/launch.json
