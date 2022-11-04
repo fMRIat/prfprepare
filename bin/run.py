@@ -276,7 +276,7 @@ for sub in subs:
         try:
             print('Letting Neuropythy work...')
             os.chdir(fsDir)
-            atlas.main(f'sub-{sub}')
+            atlas.main(f'sub-{sub}', '-v', 'S')
             os.chdir(path.expanduser('~'))
         except:
             die('Neuropythy failed!')
