@@ -272,11 +272,11 @@ for sub in subs:
 
     ###############################################################################
     # run neuropythy if not existing yet
-    if not path.isfile(path.join(fsDir, f'sub-{sub}', 'surf', 'lh.benson14_varea.mgz')):
+    if not path.isfile(path.join(fsDir, f'sub-{sub}', 'mri', 'benson14_varea.mgz')):
         try:
             print('Letting Neuropythy work...')
             os.chdir(fsDir)
-            atlas.main(f'sub-{sub}', '-v', 'S')
+            atlas.main(f'sub-{sub}', '-v', '-S')
             os.chdir(path.expanduser('~'))
         except:
             die('Neuropythy failed!')

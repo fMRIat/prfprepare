@@ -63,7 +63,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             
             # loop over all defined atlases
             for atlas in atlases:
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, note, hemi, allROImask, analysisSpace)
+                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace)
 
             # define the json files for the found mask 
             # loop over all defined atlases
@@ -457,7 +457,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace):
         rois = ['fullBrain']
 
     else:
-        die('You specified a wrong atlas, please choose from [benson, wang, fs_custom]!')
+        die(f'You specified a wrong atlas ({atlas}), please choose from [benson, wang, fs_custom]!')
 
     return areas, areaLabels, rois, atlasName
 
