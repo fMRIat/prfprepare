@@ -63,13 +63,13 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             
             # loop over all defined atlases
             for atlas in atlases:
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, note, hemi, allROImask)
+                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, note, hemi, allROImask, analysisSpace)
 
             # define the json files for the found mask 
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn)
+                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn, analysisSpace)
 
                 # go for all given ROIs
                 for roi in rois:
@@ -157,13 +157,13 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                 resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
                 nib.save(resDilRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}'))
                         
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask)
+                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace)
                                                 
             # define the json files for the found mask 
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn)
+                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn, analysisSpace)
 
                 # go for all given ROIs
                 for roi in rois:
@@ -360,10 +360,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
 
 
-def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask):
+def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace):
 # find the merged mask
     # load in the atlas
-    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn)
+    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn, analysisSpace)
 
     # go for all given ROIs
     for roi in rois:
@@ -385,7 +385,7 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask):
     return allROImask
 
 
-def load_atlas(atlas, fsDir, sub, hemi, rois):
+def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace):
     if analysisSpace == 'fsnative':
         atlasF = 'surf'
         atlasPre = f'{hemi}h.'
