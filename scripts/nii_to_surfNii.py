@@ -210,7 +210,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                      'thisHemiSize': int(allROImask.sum()),
                                      'boldFiles': boldFiles,
                                      'origImageSize': list(allROImask.shape),
-                                     'roiPos3D': np.array(np.where(allROImask)).T.tolist(),
+                                     'roiPos3D': np.array(np.where(thisROImask)).T.tolist(),
                                      'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
                                      }
                             with open(jsonP, 'w') as fl:
