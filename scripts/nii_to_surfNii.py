@@ -70,7 +70,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             for atlas in atlases:
                 # load in the atlas
                 areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn, analysisSpace)
-
+                
                 # go for all given ROIs
                 for roi in rois:
                     # if we want fullBrain change the mask to all ones
@@ -368,7 +368,7 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace):
 
     # go for all given ROIs
     for roi in rois:
-                # if we want fullBrain change the mask to all ones
+        # if we want fullBrain change the mask to all ones
         if roi == 'fullBrain':
             allROImask = np.ones(allROImask.shape)
 
@@ -435,9 +435,9 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace):
         atlasName = atlas
 
     elif 'annot' in atlas:
-        if 'atlasF' not in locals():
-            die('no annts in vol!')
-        
+        if analysisSpace == 'volume':
+            return [], [], [], []
+            
         if hemi+'h.' in atlas:
             annotP = path.join(fsDir, f'sub-{sub}', 'customLabel', atlas)
 
