@@ -162,6 +162,7 @@ if 'fs_custom' in atlases:
         print(f'We could not find a custom.zip in {fsAvgLabelCustom}!')
         print( 'Removing fs_custom atlas from list.')
         atlases.remove('fs_custom')
+        customAnnots = []
     else:
         note(f'Found custom.zip in {fsAvgLabelCustom}!')
         if not path.isfile(path.join(fsAvgLabelCustom, 'DONE')):
@@ -281,17 +282,18 @@ for sub in subs:
 
     ###############################################################################
     # Convert the annots to indivisual subject space using surf2surf
-    os.environ['SUBJECTS_DIR'] = fsDir
+    if customAnnots:
+        os.environ['SUBJECTS_DIR'] = fsDir
 
-    sublbl = path.join(fsDir, f'sub-{sub}', 'customLabel')
-    if not path.isdir(sublbl):
-        os.mkdir(sublbl)
-    for annot in customAnnots:
-        if not path.isfile(path.join(sublbl, path.basename(annot))):
-            he = path.basename(annot).split('.')[0]
-            cmd = (f'mri_surf2surf --srcsubject fsaverage --trgsubject sub-{sub} --hemi {he} '
-                   f'--sval-annot {annot} --tval {path.join(sublbl, path.basename(annot))}')
-            sp.call(cmd, shell=True)
+        sublbl = path.join(fsDir, f'sub-{sub}', 'customLabel')
+        if not path.isdir(sublbl):
+            os.mkdir(sublbl)
+        for annot in customAnnots:
+            if not path.isfile(path.join(sublbl, path.basename(annot))):
+                he = path.basename(annot).split('.')[0]
+                cmd = (f'mri_surf2surf --srcsubject fsaverage --trgsubject sub-{sub} --hemi {he} '
+                    f'--sval-annot {annot} --tval {path.join(sublbl, path.basename(annot))}')
+                sp.call(cmd, shell=True)
 
     ###############################################################################
     # do the actual work
