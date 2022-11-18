@@ -10,7 +10,7 @@ if [ "$1" = "DEBUG" ]
 elif [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "-help" ] || [ "$1" = "help" ]
     then cat /opt/help.txt
     exit 0
-else 
+else
     source /opt/conda/etc/profile.d/conda.sh
     conda activate scientific
 fi
@@ -30,7 +30,7 @@ VERBOSE=0
 FORCE=0 # 1 for force overwrite
 
 ###############################################################################
-# Configure Freesurfer 
+# Configure Freesurfer
 
 export OS=Linux
 export FS_OVERRIDE=0
