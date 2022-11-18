@@ -21,11 +21,6 @@ from scipy.io import loadmat
 from scipy.ndimage import grey_dilation
 
 
-def die(*args):
-    print(*args)
-    sys.exit(1)
-
-
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
                    fmriprepLegacyLayout, average, output_only_average,
@@ -44,6 +39,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
     as well as startScan in the _params.mat file.
     '''
 
+    def die(*args):
+        print(*args)
+        sys.exit(1)
+
     def note(*args):
         if verbose:
             print(*args)
@@ -60,17 +59,17 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
             # define the empty mask
             allROImask = np.zeros(nVertices)
-            
+
             # loop over all defined atlases
             for atlas in atlases:
                 allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace)
 
-            # define the json files for the found mask 
+            # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
                 areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, roisIn, analysisSpace)
-                
+
                 # go for all given ROIs
                 for roi in rois:
                     # if we want fullBrain change the mask to all ones
@@ -108,7 +107,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                     boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
 
                             # define the json  for this specific atlas-roi combi for one subject and session
-                            jsonP = path.join(funcOutP, 
+                            jsonP = path.join(funcOutP,
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
                             jsonI = {'atlas': atlasName,
                                      'roi': roi,
@@ -128,38 +127,38 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             hemiRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.ribbon.mgz'))
 
             # load an example bold image
-            boldref = nib.load(glob(path.join(subInDir, 'ses-*', 'func', 
+            boldref = nib.load(glob(path.join(subInDir, 'ses-*', 'func',
                             f'sub-{sub}_ses-*_task-*_run-*_space-T1w_boldref.nii.gz'))[0])
-            
+
             allROImask = np.zeros(boldref.shape)
-            
+
             for atlas in atlases:
                 # we get the atlases as volumes
                 if atlas == 'benson':
-                    atlasName = 'benson14_varea.mgz' 
+                    atlasName = 'benson14_varea.mgz'
                 elif atlas == 'wang':
                     atlasName = 'wang15_mplbl.mgz'
                 else:
                     print('With analysisSpace==volume you can only use atlases [benson, wang]!')
                     continue
-                
+
                 atlasRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', atlasName))
-            
+
                 hemiAtlasRibbonDat = atlasRibbon.get_fdata() * hemiRibbon.get_fdata().astype(bool)
-            
+
                 dilHemiAtlasRibbonDat = grey_dilation(hemiAtlasRibbonDat, size=(2,2,2))
-                dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat, 
-                                                        header=atlasRibbon.header, 
+                dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat,
+                                                        header=atlasRibbon.header,
                                                         affine=atlasRibbon.affine)
                 nib.save(dilHemiAtlasRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.dil_{atlasName}'))
 
                 # resample the mask to bold space
                 resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
                 nib.save(resDilRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}'))
-                        
+
                 allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace)
-                                                
-            # define the json files for the found mask 
+
+            # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
@@ -202,7 +201,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                     boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
 
                             # define the json  for this specific atlas-roi combi for one subject and session
-                            jsonP = path.join(funcOutP, 
+                            jsonP = path.join(funcOutP,
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
                             jsonI = {'atlas': atlasName,
                                      'roi': roi,
@@ -215,7 +214,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                      }
                             with open(jsonP, 'w') as fl:
                                 json.dump(jsonI, fl, indent=4)
-        
+
         else:
             die(f'Your analysisSpace {analysisSpace} is not supported! '
                 'Please choose from [fsaverage, volume]')
@@ -393,7 +392,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace):
     elif analysisSpace == 'volume':
         atlasF = 'mri'
         atlasPre = f'{hemi}h.res_dil_'
-    
+
     if atlas == 'benson':
         areasP = path.join(fsDir, f'sub-{sub}', atlasF, f'{atlasPre}benson14_varea.mgz')
         if not path.exists(areasP):
@@ -437,7 +436,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace):
     elif 'annot' in atlas:
         if analysisSpace == 'volume':
             return [], [], [], []
-            
+
         if hemi+'h.' in atlas:
             annotP = path.join(fsDir, f'sub-{sub}', 'customLabel', atlas)
 
