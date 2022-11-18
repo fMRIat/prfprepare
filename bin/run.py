@@ -178,7 +178,8 @@ if 'fs_custom' in atlases:
         customAnnots = glob(path.join(fsAvgLabelCustom, '*.annot'))
         atlases.remove('fs_custom')
         atlases += [path.basename(a) for a in customAnnots]
-
+else:
+    customAnnots = []
 
 # get additional prams from config.json
 customName = config2list(config['custom_output_name'])[0]
