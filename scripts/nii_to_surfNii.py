@@ -21,6 +21,12 @@ from scipy.io import loadmat
 from scipy.ndimage import grey_dilation
 
 
+def note(*args):
+    if verbose:
+        print(*args)
+    return None
+
+
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
                    fmriprepLegacyLayout, average, output_only_average,
@@ -42,11 +48,6 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
     def die(*args):
         print(*args)
         sys.exit(1)
-
-    def note(*args):
-        if verbose:
-            print(*args)
-        return None
 
     for hemi in ['l', 'r']:
         # first get the total number of vertices
