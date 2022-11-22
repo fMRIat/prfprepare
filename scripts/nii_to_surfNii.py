@@ -21,11 +21,6 @@ from scipy.io import loadmat
 from scipy.ndimage import grey_dilation
 
 
-def note(*args):
-    if verbose:
-        print(*args)
-    return None
-
 
 ###############################################################################
 def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParams,
@@ -45,6 +40,12 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
     as well as startScan in the _params.mat file.
     '''
 
+
+    def note(*args):
+        if verbose:
+            print(*args)
+        return None
+
     def die(*args):
         print(*args)
         sys.exit(1)
@@ -63,14 +64,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
             # loop over all defined atlases
             for atlas in atlases:
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, 
+                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
                                            allROImask, analysisSpace, verbose)
 
             # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, 
+                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
                                                                 roisIn, analysisSpace, verbose)
 
                 # go for all given ROIs
@@ -159,14 +160,14 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                 resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
                 nib.save(resDilRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}'))
 
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi, 
+                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
                                            allROImask, analysisSpace, verbose)
 
             # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, 
+                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
                                                                 roisIn, analysisSpace, verbose)
 
                 # go for all given ROIs
@@ -367,8 +368,17 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
 def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace, verbose):
 # find the merged mask
+    def note(*args):
+        if verbose:
+            print(*args)
+        return None
+
+    def die(*args):
+        print(*args)
+        sys.exit(1)
+
     # load in the atlas
-    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi, 
+    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
                                                     roisIn, analysisSpace, verbose)
 
     # go for all given ROIs
@@ -392,6 +402,15 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace, ve
 
 
 def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace, verbose):
+    def note(*args):
+        if verbose:
+            print(*args)
+        return None
+
+    def die(*args):
+        print(*args)
+        sys.exit(1)
+
     if analysisSpace == 'fsnative':
         atlasF = 'surf'
         atlasPre = f'{hemi}h.'
