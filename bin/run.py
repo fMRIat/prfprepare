@@ -70,8 +70,6 @@ def config2list(c, b=None):
         elif isinstance(c, float) or isinstance(c, bool) or isinstance(c, int):
             l = [c]
 
-    l.sort()
-
     return l
 
 
