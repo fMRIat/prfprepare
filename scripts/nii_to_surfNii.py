@@ -50,6 +50,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
         print(*args)
         sys.exit(1)
 
+    if forceParams:
+        forceParamsFile, forceTask = forceParams
+
     for hemi in ['l', 'r']:
         # first get the total number of vertices
 
@@ -97,6 +100,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             makedirs(funcOutP, exist_ok=True)
 
                             tasks = layout.get_tasks(subject=sub, session=ses)
+                            if forceParams:
+                                tasks = [forceTask]
 
                             for task in tasks:
                                 runs = layout.get_runs(subject=sub, session=ses, task=task)
@@ -193,6 +198,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             makedirs(funcOutP, exist_ok=True)
 
                             tasks = layout.get_tasks(subject=sub, session=ses)
+                            if forceParams:
+                                tasks = [forceTask]
 
                             for task in tasks:
                                 runs = layout.get_runs(subject=sub, session=ses, task=task)
@@ -231,6 +238,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             funcOutP = path.join(outP, f'ses-{ses}', 'func')
 
             tasks = layout.get_tasks(subject=sub, session=ses)
+            if forceParams:
+                tasks = [forceTask]
+
             for task in tasks:
                 runs = layout.get_runs(subject=sub, session=ses, task=task)
                 # adapt for averaged runs
@@ -301,8 +311,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                     # get rid of volumes where the stimulus showed only blank (prescanDuration)
                     if forceParams:
-                        paramsFile, task = forceParams
-                        params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile),
+                        params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile),
                                          simplify_cells=True)
                     else:
                         if 'av' not in str(run):
