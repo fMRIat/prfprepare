@@ -316,8 +316,8 @@ for sub in subs:
     # we could add some option for smoothing here?
 
     print('Creating events.tsv for the data containing the correct stimulus...')
-    link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, average,
-                 output_only_average, force, verbose)
+    link_stimuli(sub, sess, layout, bidsDir, subOutDir, etcorr, forceParams,
+                 average, output_only_average, force, verbose)
 
 # copy the dataset_discription from fmriprep
 sp.call(f'cp {path.join(inDir,"dataset_description.json")} {outDir}', shell=True)

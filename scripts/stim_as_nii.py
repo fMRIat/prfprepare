@@ -40,8 +40,8 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
     if forceParams == ['']:
         forceParams = False
     if forceParams:
-        paramsFile, task = forceParams
-        logPs = [path.join(bidsDir, 'sourcedata', 'vistadisplog', paramsFile)]
+        forceParamsFile, forceTask = forceParams
+        logPs = [path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile)]
     else:
         logPs = np.array(glob(path.join(bidsDir, 'sourcedata', 'vistadisplog',
                                         f'sub-{sub}', '*', '*1_params.mat')))
@@ -59,7 +59,9 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         stim  = path.basename(loadmat(logP, simplify_cells=True)['params']['loadMatrix'])
         stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
 
-        if not forceParams:
+        if forceParams:
+            task = forceTask
+        else:
             task = logP.split('task-')[-1].split('_run')[0]
 
         # create output dirs
@@ -149,7 +151,10 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
             for logP in logPs:
                 stim = loadmat(logP, simplify_cells=True)['LoadStimName']
                 stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim + '.mat')
-                task = logP.split('task-')[-1].split('_run')[0]
+                if forceParams:
+                    task = forceTask
+                else:
+                    task = logP.split('task-')[-1].split('_run')[0]
                 run = logP.split('run-')[-1].split('_')[0]
 
                 makedirs(path.join(outPET, 'stimuli'), exist_ok=True)

@@ -13,7 +13,7 @@ from glob import glob
 import sys
 
 
-def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
+def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr, forceParams,
                  average, output_only_average, force, verbose):
     '''
     Here we link the _bold.nii.gz files to the corresponding stimulus files
@@ -31,9 +31,14 @@ def link_stimuli(sub, sess, layout, bidsDir, outP, etcorr,
             print(*args)
         return None
 
+    if forceParams:
+        forceParamsFile, forceTask = forceParams
+
     for sesI, ses in enumerate(sess):
 
         tasks = layout.get(subject=sub, session=ses, return_type='id', target='task')
+        if forceParams:
+            tasks = [forceTask]
 
         for task in tasks:
 
