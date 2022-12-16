@@ -124,7 +124,7 @@ note(json.dumps(config, indent=4))
 ################################################
 # everything not subject-specific
 # define input direcotry
-fmriprepAnalysis = f"{int(config2list(config['config']['fmriprep_analysis'])[0]):02d}"
+fmriprepAnalysis = config['config']['fmriprep_analysis']
 
 inDir = path.join(flywheelBase, 'input', f'analysis-{fmriprepAnalysis}')
 note(f'Loading data from {inDir}')
