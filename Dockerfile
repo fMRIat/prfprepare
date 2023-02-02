@@ -88,6 +88,7 @@ RUN conda update -n base -c defaults conda
 COPY conda_config/scientific.yml .
 RUN conda env create -f scientific.yml
 
+RUN sed -i 's/np.int/np.int32/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/vision/models.py
 
 RUN apt update && apt install -y jq
 

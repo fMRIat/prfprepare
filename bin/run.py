@@ -50,7 +50,7 @@ def listFromStr(s):
 def config2list(c, b=None):
     if b is not None:
         if 'all' in c:
-            l = b
+            l = sorted(b)
         else:
             if isinstance(c, list):
                 l = c

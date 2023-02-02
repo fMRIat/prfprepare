@@ -19,7 +19,7 @@ import numpy as np
 from nibabel.processing import resample_from_to
 from scipy.io import loadmat
 from scipy.ndimage import grey_dilation
-
+from nibabel.funcs import four_to_three
 
 
 ###############################################################################
@@ -99,45 +99,51 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             funcOutP = path.join(outP, f'ses-{ses}', 'func')
                             makedirs(funcOutP, exist_ok=True)
 
-                            tasks = layout.get_tasks(subject=sub, session=ses)
-                            if forceParams:
-                                tasks = [forceTask]
-
-                            for task in tasks:
-                                runs = layout.get_runs(subject=sub, session=ses, task=task)
-
-                                # adapt for averaged runs
-                                if average and len(runs) > 1:
-                                    if output_only_average:
-                                        runs = [''.join(map(str, runs)) + 'avg']
-                                    else:
-                                        runs.append(''.join(map(str, runs)) + 'avg')
-                                for run in runs:
-                                    boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
-
-                            # define the json  for this specific atlas-roi combi for one subject and session
                             jsonP = path.join(funcOutP,
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
-                            jsonI = {'atlas': atlasName,
-                                     'roi': roi,
-                                     'hemisphere': hemi,
-                                     'thisHemiSize': int(allROImask.sum()),
-                                     'boldFiles': boldFiles,
-                                     'roiIndFsnative': np.where(thisROImask)[0].tolist(),
-                                     'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
-                                     }
-                            if len(jsonI['roiIndFsnative']) != len(jsonI['roiIndBold']):
-                                die('Something wrong with the Indices!!')
-                            with open(jsonP, 'w') as fl:
-                                json.dump(jsonI, fl, indent=4)
+                            if not path.isfile(jsonP):
+
+                                tasks = layout.get_tasks(subject=sub, session=ses)
+                                if forceParams:
+                                    tasks = [forceTask]
+
+                                for task in tasks:
+                                    runs = layout.get_runs(subject=sub, session=ses, task=task)
+
+                                    # adapt for averaged runs
+                                    if average and len(runs) > 1:
+                                        if output_only_average:
+                                            runs = [''.join(map(str, runs)) + 'avg']
+                                        else:
+                                            runs.append(''.join(map(str, runs)) + 'avg')
+                                    for run in runs:
+                                        boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+
+                                # define the json  for this specific atlas-roi combi for one subject and session
+                                jsonP = path.join(funcOutP,
+                                            f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
+                                jsonI = {'atlas': atlasName,
+                                        'roi': roi,
+                                        'hemisphere': hemi,
+                                        'thisHemiSize': int(allROImask.sum()),
+                                        'boldFiles': boldFiles,
+                                        'roiIndFsnative': np.where(thisROImask)[0].tolist(),
+                                        'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
+                                        }
+                                if len(jsonI['roiIndFsnative']) != len(jsonI['roiIndBold']):
+                                    die('Something wrong with the Indices!!')
+                                with open(jsonP, 'w') as fl:
+                                    json.dump(jsonI, fl, indent=4)
 
         elif analysisSpace == 'volume':
             # load the GM mask from freesurfer for the receptive hemi
             hemiRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.ribbon.mgz'))
 
             # load an example bold image
-            boldref = nib.load(glob(path.join(subInDir, 'ses-*', 'func',
-                            f'sub-{sub}_ses-*_task-*_run-*_space-T1w_boldref.nii.gz'))[0])
+            boldref4d = nib.load(glob(path.join(subInDir, 'ses-*', 'func',
+                            f'sub-{sub}_ses-*_task-*_run-*_space-T1w_desc-preproc_bold.nii*'))[0])
+
+            boldref = four_to_three(boldref4d)[0]
 
             allROImask = np.zeros(boldref.shape)
 
@@ -151,22 +157,25 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     print('With analysisSpace==volume you can only use atlases [benson, wang]!')
                     continue
 
-                atlasRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', atlasName))
+                res_del_name = path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}')
+                if not path.isfile(res_del_name):
 
-                hemiAtlasRibbonDat = atlasRibbon.get_fdata() * hemiRibbon.get_fdata().astype(bool)
+                    atlasRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', atlasName))
 
-                dilHemiAtlasRibbonDat = grey_dilation(hemiAtlasRibbonDat, size=(2,2,2))
-                dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat,
-                                                        header=atlasRibbon.header,
-                                                        affine=atlasRibbon.affine)
-                nib.save(dilHemiAtlasRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.dil_{atlasName}'))
+                    hemiAtlasRibbonDat = atlasRibbon.get_fdata() * hemiRibbon.get_fdata().astype(bool)
 
-                # resample the mask to bold space
-                resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
-                nib.save(resDilRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}'))
+                    dilHemiAtlasRibbonDat = grey_dilation(hemiAtlasRibbonDat, size=(2,2,2))
+                    dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat,
+                                                            header=atlasRibbon.header,
+                                                            affine=atlasRibbon.affine)
+                    nib.save(dilHemiAtlasRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.dil_{atlasName}'))
+
+                    # resample the mask to bold space
+                    resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
+                    nib.save(resDilRibbon, res_del_name)
 
                 allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
-                                           allROImask, analysisSpace, verbose)
+                                        allROImask, analysisSpace, verbose)
 
             # define the json files for the found mask
             # loop over all defined atlases
@@ -197,43 +206,46 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             funcOutP = path.join(outP, f'ses-{ses}', 'func')
                             makedirs(funcOutP, exist_ok=True)
 
-                            tasks = layout.get_tasks(subject=sub, session=ses)
-                            if forceParams:
-                                tasks = [forceTask]
-
-                            for task in tasks:
-                                runs = layout.get_runs(subject=sub, session=ses, task=task)
-
-                                # adapt for averaged runs
-                                if average and len(runs) > 1:
-                                    if output_only_average:
-                                        runs = [''.join(map(str, runs)) + 'avg']
-                                    else:
-                                        runs.append(''.join(map(str, runs)) + 'avg')
-                                for run in runs:
-                                    boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
-
-                            # define the json  for this specific atlas-roi combi for one subject and session
                             jsonP = path.join(funcOutP,
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
-                            jsonI = {'atlas': atlasName,
-                                     'roi': roi,
-                                     'hemisphere': hemi,
-                                     'thisHemiSize': int(allROImask.sum()),
-                                     'boldFiles': boldFiles,
-                                     'origImageSize': list(allROImask.shape),
-                                     'roiPos3D': np.array(np.where(thisROImask)).T.tolist(),
-                                     'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
-                                     }
-                            with open(jsonP, 'w') as fl:
-                                json.dump(jsonI, fl, indent=4)
+                            if not path.isfile(jsonP):
+
+                                tasks = layout.get_tasks(subject=sub, session=ses)
+                                if forceParams:
+                                    tasks = [forceTask]
+
+                                for task in tasks:
+                                    runs = layout.get_runs(subject=sub, session=ses, task=task)
+
+                                    # adapt for averaged runs
+                                    if average and len(runs) > 1:
+                                        if output_only_average:
+                                            runs = [''.join(map(str, runs)) + 'avg']
+                                        else:
+                                            runs.append(''.join(map(str, runs)) + 'avg')
+                                    for run in runs:
+                                        boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+
+                                # define the json  for this specific atlas-roi combi for one subject and session
+                                jsonI = {'atlas': atlasName,
+                                        'roi': roi,
+                                        'hemisphere': hemi,
+                                        'thisHemiSize': int(allROImask.sum()),
+                                        'boldFiles': boldFiles,
+                                        'origImageSize': list(allROImask.shape),
+                                        'roiPos3D': np.array(np.where(thisROImask)).T.tolist(),
+                                        'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
+                                        }
+                                with open(jsonP, 'w') as fl:
+                                    json.dump(jsonI, fl, indent=4)
 
         else:
             die(f'Your analysisSpace {analysisSpace} is not supported! '
                 'Please choose from [fsaverage, volume]')
+
         # now lets apply the merged mask to all bold files
         for sesI, ses in enumerate(sess):
-            note(f'[nii_to_sufNii.py] Working on sub-{sub} ses-{ses} hemi-{hemi.upper()}')
+            # note(f'[nii_to_sufNii.py] Working on sub-{sub} ses-{ses} hemi-{hemi.upper()}')
             funcInP = path.join(subInDir, f'ses-{ses}', 'func')
             funcOutP = path.join(outP, f'ses-{ses}', 'func')
 
@@ -254,124 +266,122 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # check if already exists, if not force skip
                     # if not path.exists(newNiiP) or force:
 
-                    if 'av' not in str(run):
-                        # name the output files
-                        newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+                    # name the output files
+                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+                    if not path.isfile(newNiiP):
+                        note(f"[nii_to_sufNii.py] Working on {path.basename(newNiiP)}...")
 
-                        # load the .gii in fsnative
-                        if analysisSpace == 'fsnative':
-                            if fmriprepLegacyLayout:
-                                giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
-                            else:
-                                giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
-
-                            # get the data data
-                            data = nib.load(giiP).agg_data()
-
-                        # or volume file in T1 space
-                        elif analysisSpace == 'volume':
-                            niiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii.gz')#'hemi-{hemi.upper()}_bold.func.gii')
-
-                            # get the data data
-                            data = nib.load(niiP).get_fdata()
-
-
-                    else:
-                        # name the output files
-                        newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
-
-                        datas = []
-                        for r in runsOrig:
+                        if 'av' not in str(run):
+                            # load the .gii in fsnative
                             if analysisSpace == 'fsnative':
                                 if fmriprepLegacyLayout:
-                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
                                 else:
-                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
 
-                                datas.append(nib.load(giiP).agg_data())
+                                # get the data data
+                                data = nib.load(giiP).agg_data()
 
                             # or volume file in T1 space
                             elif analysisSpace == 'volume':
-                                niiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii.gz')#'hemi-{hemi.upper()}_bold.func.gii')
+                                niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii*'))[0]
 
-                                # get the data data
-                                datas.append(nib.load(niiP).get_fdata())
+                                # get the data
+                                data = np.asarray(nib.load(niiP).get_fdata())
 
-                        if len(datas) > 1:
-                            # crop them to the same length for averaging
-                            giiMinLength = min([g.shape[-1] for g in datas])
-                            gii = [g[..., :giiMinLength] for g in datas]
-                            # average the runs
-                            data = np.mean(gii, 0)
                         else:
-                            data = gii[0]
+                            datas = []
+                            for r in runsOrig:
+                                if analysisSpace == 'fsnative':
+                                    if fmriprepLegacyLayout:
+                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                    else:
+                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
 
-                    # apply the combined ROI mask
-                    data = data[allROImask, :]
+                                    datas.append(nib.load(giiP).agg_data())
 
-                    # get rid of volumes where the stimulus showed only blank (prescanDuration)
-                    if forceParams:
-                        params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile),
-                                         simplify_cells=True)
-                    else:
-                        if 'av' not in str(run):
-                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
-                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat'),
-                                             simplify_cells=True)
+                                # or volume file in T1 space
+                                elif analysisSpace == 'volume':
+                                    niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii*'))[0]
+
+                                    # get the data data
+                                    datas.append(np.asarray(nib.load(niiP).get_fdata()))
+
+                            if len(datas) > 1:
+                                # crop them to the same length for averaging
+                                giiMinLength = min([g.shape[-1] for g in datas])
+                                gii = [g[..., :giiMinLength] for g in datas]
+                                # average the runs
+                                data = np.mean(gii, 0)
+                            else:
+                                data = datas[0]
+
+                        # apply the combined ROI mask
+                        data = data[allROImask, :]
+
+                        # get rid of volumes where the stimulus showed only blank (prescanDuration)
+                        if forceParams:
+                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile),
+                                            simplify_cells=True)
                         else:
-                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
-                                                       f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'),
-                                             simplify_cells=True)
+                            if 'av' not in str(run):
+                                params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
+                                                        f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat'),
+                                                simplify_cells=True)
+                            else:
+                                params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
+                                                        f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'),
+                                                simplify_cells=True)
 
-                    tr = params['params']['tr']
+                        tr = params['params']['tr']
 
-                    if 'prescanDuration' in params['params'].keys():
-                        prescan = params['params']['prescanDuration']
+                        if 'prescanDuration' in params['params'].keys():
+                            prescan = params['params']['prescanDuration']
 
-                        if prescan > 0:
-                            note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
-                            data = data[:, int(prescan / tr):]
+                            if prescan > 0:
+                                note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
+                                data = data[:, int(prescan / tr):]
 
-                    else:
-                        prescan = 0
+                        else:
+                            prescan = 0
 
-                    # remove volumes the stimulus was wating to start (startScan)
-                    if 'startScan' in params['params'].keys():
-                        startScan = params['params']['startScan']
+                        # remove volumes the stimulus was wating to start (startScan)
+                        if 'startScan' in params['params'].keys():
+                            startScan = params['params']['startScan']
 
-                        if startScan  > 0:
-                            note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
-                            data = data[:, int(startScan / tr):]
+                            if startScan  > 0:
+                                note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
+                                data = data[:, int(startScan / tr):]
 
 
-                    # create and save new nii img
-                    try:
-                        apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
-                        stimNii = nib.load(apertures[[f'task-{task}_' in ap for ap in apertures]].item())
-                    except:
-                        print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
-                        continue
+                        # create and save new nii img
+                        try:
+                            apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
+                            stimNii = nib.load(apertures[[f'task-{task}_' in ap for ap in apertures]].item())
+                        except:
+                            print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
+                            continue
 
-                    # trim data to stimulus length, gets rid of volumes when the
-                    # scanner was running for longer than the task and is topped manually
-                    stimLength = stimNii.shape[-1]
-                    if data.shape[1] < stimLength:
-                        die(f'For {path.basename(newNiiP)} the data is shorter than '
-                            F'the simulus file ({data.shape[1]}<{stimLength})')
-                    elif data.shape[1] > stimLength:
-                        data = data[:, :stimLength]
-                    else:
-                        pass
+                        # trim data to stimulus length, gets rid of volumes when the
+                        # scanner was running for longer than the task and is topped manually
+                        stimLength = stimNii.shape[-1]
+                        if data.shape[1] < stimLength:
+                            die(f'For {path.basename(newNiiP)} the data is shorter than '
+                                F'the simulus file ({data.shape[1]}<{stimLength})')
+                        elif data.shape[1] > stimLength:
+                            data = data[:, :stimLength]
+                        else:
+                            pass
 
-                    # save the new nifti
-                    newNii = nib.Nifti2Image(data[:, None, None, :].astype('float32'), affine=np.eye(4))
-                    newNii.header['pixdim'] = stimNii.header['pixdim']
-                    newNii.header['qoffset_x'] = 1
-                    newNii.header['qoffset_y'] = 1
-                    newNii.header['qoffset_z'] = 1
-                    newNii.header['cal_max'] = 1
-                    newNii.header['xyzt_units'] = 10
-                    nib.save(newNii, newNiiP)
+                        # save the new nifti
+                        newNii = nib.Nifti2Image(data[:, None, None, :].astype('float32'), affine=np.eye(4))
+                        newNii.header['pixdim'] = stimNii.header['pixdim']
+                        newNii.header['qoffset_x'] = 1
+                        newNii.header['qoffset_y'] = 1
+                        newNii.header['qoffset_z'] = 1
+                        newNii.header['cal_max'] = 1
+                        newNii.header['xyzt_units'] = 10
+                        nib.save(newNii, newNiiP)
 
 
 
@@ -497,20 +507,20 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace, verbose):
 
 
 if __name__ == "__main__":
-    sub = 'S051'
+    sub = '001'
     ses = ['001']
-    baseP = '/Users/dlinhardt/Applications/develop/cluster_data'
+    baseP = '/z/fmri/data/retcomp17BIDS'
     bidsDir  = path.join(baseP, 'BIDS')
     layout   = bids.BIDSLayout(bidsDir)
-    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', f'sub-{sub}')
-    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-02', f'sub-{sub}')
-    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', 'sourcedata', 'freesurfer')
-    forceParams = ['mini_params','prf']
+    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-custom', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-01', f'sub-{sub}')
+    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-custom', 'sourcedata', 'freesurfer')
+    forceParams = ''
     fmriprepLegacyLayout = False
     average = True
     output_only_average = False
     atlases = ['benson','wang','lh.LOTS.annot','lh.litVWFA.annot','lh.motspots.annot','rh.LOTS.annot','rh.motspots.annot']
-    roisIn  = ['all']
+    roisIn  = ['V1','V2','V3']
     analysisSpace = 'volume'
     force   = False
     verbose = True
