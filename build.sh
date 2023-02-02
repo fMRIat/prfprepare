@@ -18,9 +18,10 @@
 # 1.3.1 copy dataset_discription to prfprepare output
 # 1.3.2 implemented volume masking based on benson and wang atlas
 # 1.3.3 fixed forceParams when multiple tasks are present
+# 1.3.4 conda update
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.3.3
+VERSION=1.3.4
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
