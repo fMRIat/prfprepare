@@ -19,6 +19,7 @@
 # 1.3.2 implemented volume masking based on benson and wang atlas
 # 1.3.3 fixed forceParams when multiple tasks are present
 # 1.3.4 conda update
+# 1.3.5 and again downgrade to python=3.8 and numpy<1.20
 
 ME=davidlinhardt
 GEAR=prfprepare
