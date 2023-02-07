@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 25 13:28:36 2021
-
-@author: dlinhardt
-"""
-
+#%%
 import nibabel as nib
 from os import path
 import numpy as np

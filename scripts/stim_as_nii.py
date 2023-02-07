@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jul 28 10:51:30 2021
-
-@author: dlinhardt
-"""
+#%%
 import numpy as np
 from os import path, makedirs
 import nibabel as nib
