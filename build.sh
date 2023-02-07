@@ -22,6 +22,6 @@
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.3.4
+VERSION=1.3.5
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
