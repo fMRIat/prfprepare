@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Apr 13 11:49:37 2022
-
-@author: dlinhardt
-"""
-
+#%%
 from link_stimuli import link_stimuli
 from nii_to_surfNii import nii_to_surfNii
 from stim_as_nii import stim_as_nii
@@ -275,7 +268,8 @@ for sub in subs:
             os.chdir(fsDir)
             atlas.main(f'sub-{sub}', '-v', '-S')
             os.chdir(path.expanduser('~'))
-        except:
+        except BaseException as error:
+            print('An exception occurred: {}'.format(error))
             die('Neuropythy failed!')
 
 
