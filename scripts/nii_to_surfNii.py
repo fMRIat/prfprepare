@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 25 13:28:36 2021
-
-@author: dlinhardt
-"""
-
+#%%
 import copy
 import json
 import sys
@@ -75,7 +68,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             for atlas in atlases:
                 # load in the atlas
                 areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
-                                                                roisIn, analysisSpace, verbose)
+                                                                roisIn, analysisSpace,
+                                                                verbose, resDilRibbonNum)
 
                 # go for all given ROIs
                 for roi in rois:
@@ -103,9 +97,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
                             if not path.isfile(jsonP):
 
-                                tasks = layout.get_tasks(subject=sub, session=ses)
                                 if forceParams:
                                     tasks = [forceTask]
+                                else:
+                                    tasks = layout.get_tasks(subject=sub, session=ses)
 
                                 for task in tasks:
                                     runs = layout.get_runs(subject=sub, session=ses, task=task)
@@ -140,49 +135,43 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             hemiRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.ribbon.mgz'))
 
             # load an example bold image
+            if forceParams:
+                task = forceTask
+            else:
+                task = layout.get_tasks(subject=sub)[0]
+
             boldref4d = nib.load(glob(path.join(subInDir, 'ses-*', 'func',
-                            f'sub-{sub}_ses-*_task-*_run-*_space-T1w_desc-preproc_bold.nii*'))[0])
+                            f'sub-{sub}_ses-*_task-{task}_run-*_space-T1w_desc-preproc_bold.nii*'))[0])
 
             boldref = four_to_three(boldref4d)[0]
 
             allROImask = np.zeros(boldref.shape)
 
             for atlas in atlases:
-                # we get the atlases as volumes
-                if atlas == 'benson':
-                    atlasName = 'benson14_varea.mgz'
-                elif atlas == 'wang':
-                    atlasName = 'wang15_mplbl.mgz'
-                else:
+                if atlas not in ['benson','wang']:
                     print('With analysisSpace==volume you can only use atlases [benson, wang]!')
                     continue
 
-                res_del_name = path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{atlasName}')
-                if not path.isfile(res_del_name):
+                resDilRibbonShape = reslice_atlas(atlas, sub, hemi, fsDir,
+                                                hemiRibbon, boldref)
 
-                    atlasRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', atlasName))
-
-                    hemiAtlasRibbonDat = atlasRibbon.get_fdata() * hemiRibbon.get_fdata().astype(bool)
-
-                    dilHemiAtlasRibbonDat = grey_dilation(hemiAtlasRibbonDat, size=(2,2,2))
-                    dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat,
-                                                            header=atlasRibbon.header,
-                                                            affine=atlasRibbon.affine)
-                    nib.save(dilHemiAtlasRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.dil_{atlasName}'))
-
-                    # resample the mask to bold space
-                    resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
-                    nib.save(resDilRibbon, res_del_name)
+                resDilRibbonNum = 0
+                while resDilRibbonShape != allROImask.shape:
+                    resDilRibbonNum += 1
+                    resDilRibbonShape = reslice_atlas(atlas, sub, hemi, fsDir,
+                                                    hemiRibbon, boldref, resDilRibbonNum)
 
                 allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
-                                        allROImask, analysisSpace, verbose)
+                                        allROImask, analysisSpace, verbose,
+                                        resDilRibbonNum)
 
             # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
                 areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
-                                                                roisIn, analysisSpace, verbose)
+                                                                roisIn, analysisSpace,
+                                                                verbose, resDilRibbonNum)
 
                 # go for all given ROIs
                 for roi in rois:
@@ -210,9 +199,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                         f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
                             if not path.isfile(jsonP):
 
-                                tasks = layout.get_tasks(subject=sub, session=ses)
                                 if forceParams:
                                     tasks = [forceTask]
+                                else:
+                                    tasks = layout.get_tasks(subject=sub, session=ses)
 
                                 for task in tasks:
                                     runs = layout.get_runs(subject=sub, session=ses, task=task)
@@ -249,9 +239,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             funcInP = path.join(subInDir, f'ses-{ses}', 'func')
             funcOutP = path.join(outP, f'ses-{ses}', 'func')
 
-            tasks = layout.get_tasks(subject=sub, session=ses)
             if forceParams:
                 tasks = [forceTask]
+            else:
+                tasks = layout.get_tasks(subject=sub, session=ses)
 
             for task in tasks:
                 runs = layout.get_runs(subject=sub, session=ses, task=task)
@@ -385,7 +376,8 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
 
 
-def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace, verbose):
+def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask,
+                  analysisSpace, verbose, resDilRibbonNum=0):
 # find the merged mask
     def note(*args):
         if verbose:
@@ -398,7 +390,8 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace, ve
 
     # load in the atlas
     areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
-                                                    roisIn, analysisSpace, verbose)
+                                                    roisIn, analysisSpace,
+                                                    verbose, resDilRibbonNum)
 
     # go for all given ROIs
     for roi in rois:
@@ -420,7 +413,8 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask, analysisSpace, ve
     return allROImask
 
 
-def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace, verbose):
+def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace,
+               verbose, resDilRibbonNum):
     def note(*args):
         if verbose:
             print(*args)
@@ -435,7 +429,7 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace, verbose):
         atlasPre = f'{hemi}h.'
     elif analysisSpace == 'volume':
         atlasF = 'mri'
-        atlasPre = f'{hemi}h.res_dil_'
+        atlasPre = f'{hemi}h.res_dil_{resDilRibbonNum}_'
 
     if atlas == 'benson':
         areasP = path.join(fsDir, f'sub-{sub}', atlasF, f'{atlasPre}benson14_varea.mgz')
@@ -505,6 +499,32 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace, verbose):
 
     return areas, areaLabels, rois, atlasName
 
+def reslice_atlas(atlas, sub, hemi, fsDir, hemiRibbon, boldref, num=0):
+    # we get the atlases as volumes
+    if atlas == 'benson':
+        atlasName = 'benson14_varea.mgz'
+    elif atlas == 'wang':
+        atlasName = 'wang15_mplbl.mgz'
+
+    res_dil_name = path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.res_dil_{num}_{atlasName}')
+    if not path.isfile(res_dil_name):
+
+        atlasRibbon = nib.load(path.join(fsDir, f'sub-{sub}', 'mri', atlasName))
+
+        hemiAtlasRibbonDat = atlasRibbon.get_fdata() * hemiRibbon.get_fdata().astype(bool)
+
+        dilHemiAtlasRibbonDat = grey_dilation(hemiAtlasRibbonDat, size=(2,2,2))
+        dilHemiAtlasRibbon    = nib.Nifti1Image(dilHemiAtlasRibbonDat,
+                                                header=atlasRibbon.header,
+                                                affine=atlasRibbon.affine)
+        nib.save(dilHemiAtlasRibbon, path.join(fsDir, f'sub-{sub}', 'mri', f'{hemi}h.dil_{atlasName}'))
+
+        # resample the mask to bold space
+        resDilRibbon = resample_from_to(dilHemiAtlasRibbon, boldref, order=0)
+        nib.save(resDilRibbon, res_dil_name)
+
+        return resDilRibbon.shape
+
 
 if __name__ == "__main__":
     sub = '001'
@@ -512,10 +532,10 @@ if __name__ == "__main__":
     baseP = '/z/fmri/data/retcomp17BIDS'
     bidsDir  = path.join(baseP, 'BIDS')
     layout   = bids.BIDSLayout(bidsDir)
-    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-custom', f'sub-{sub}')
-    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-01', f'sub-{sub}')
-    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-custom', 'sourcedata', 'freesurfer')
-    forceParams = ''
+    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-customNoReslice', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-02', f'sub-{sub}')
+    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-customNoReslice', 'sourcedata', 'freesurfer')
+    forceParams = ['wedge','wedgeHR']
     fmriprepLegacyLayout = False
     average = True
     output_only_average = False
