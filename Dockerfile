@@ -91,6 +91,8 @@ RUN conda env create -f scientific.yml
 # RUN sed -i 's/np\.int)/np.int32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 # RUN sed -i 's/np\.int:/np.int32:/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 # RUN sed -i 's/np\.object/object/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+# RUN sed -i 's/np\.bool/bool/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+# RUN sed -i 's/np\.float)/float32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 
 RUN apt update && apt install -y jq
 
