@@ -83,7 +83,7 @@ RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/downlo
 # Put conda in path so we can use conda activate
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-RUN mamba update -n base -all
+RUN mamba update -n base --all
 
 # install conda env
 COPY conda_config/scientific.yml .
