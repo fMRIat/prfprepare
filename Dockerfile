@@ -74,25 +74,26 @@ RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/free
 
 
 ############################
-# Install miniconda
+# Install mamba
 ENV CONDA_DIR /opt/conda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
-     /bin/bash ~/miniconda.sh -b -p /opt/conda
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh -O ~/mamba.sh && \
+      /bin/bash ~/mamba.sh -b -p /opt/conda
 
 # Put conda in path so we can use conda activate
 ENV PATH=$CONDA_DIR/bin:$PATH
 
-RUN conda update -n base -c defaults conda
+RUN mamba update -n base -all
 
 # install conda env
 COPY conda_config/scientific.yml .
-RUN conda env create -f scientific.yml
+RUN mamba env create -f scientific.yml
 
-# RUN sed -i 's/np\.int)/np.int32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
-# RUN sed -i 's/np\.int:/np.int32:/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
-# RUN sed -i 's/np\.object/object/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
-# RUN sed -i 's/np\.bool/bool/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
-# RUN sed -i 's/np\.float)/float32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.int)/np.int32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.int:/np.int32:/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.object/object/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.bool/bool/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.float)/float32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 
 RUN apt update && apt install -y jq
 
