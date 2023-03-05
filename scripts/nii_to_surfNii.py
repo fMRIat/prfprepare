@@ -69,7 +69,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                 # load in the atlas
                 areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
                                                                 roisIn, analysisSpace,
-                                                                verbose, resDilRibbonNum)
+                                                                verbose)
 
                 # go for all given ROIs
                 for roi in rois:
@@ -414,7 +414,7 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask,
 
 
 def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace,
-               verbose, resDilRibbonNum):
+               verbose, resDilRibbonNum=0):
     def note(*args):
         if verbose:
             print(*args)
