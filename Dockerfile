@@ -67,8 +67,6 @@ RUN apt update && apt install -y \
     subversion\
     vim
 
-
-
 # Install Freesurfer
 RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-ubuntu20_amd64-7.3.2.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
 
@@ -93,10 +91,9 @@ RUN sed -i 's/np\.int)/np.int32)/g' /opt/conda/envs/scientific/lib/python3.10/si
 RUN sed -i 's/np\.int:/np.int32:/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 RUN sed -i 's/np\.object/object/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 RUN sed -i 's/np\.bool/bool/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
-RUN sed -i 's/np\.float)/float32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
+RUN sed -i 's/np\.float)/np.float32)/g' /opt/conda/envs/scientific/lib/python3.10/site-packages/neuropythy/*/*.py
 
 RUN apt update && apt install -y jq
-
 
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0

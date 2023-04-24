@@ -222,3 +222,18 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                     nib.save(img, oFname)
 
     return etcorr
+
+
+if __name__ == "__main__":
+    sub = 'h001'
+    ses = ['001']
+    baseP = '/z/fmri/data/stimsim23'
+    bidsDir  = path.join(baseP, 'BIDS')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-03', f'sub-{sub}')
+    forceParams = '' #['wedge','wedgeHR']
+    etcorr = False
+    use_numImages = False
+    force   = False
+    verbose = True
+    stim_as_nii(sub, ses, bidsDir, outP, etcorr, forceParams,
+                use_numImages, force, verbose)
