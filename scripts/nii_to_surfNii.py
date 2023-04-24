@@ -138,10 +138,10 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             if forceParams:
                 task = forceTask
             else:
-                task = layout.get_tasks(subject=sub)[0]
+                task = layout.get_tasks(subject=sub, session=sess[0])[0]
 
-            boldref4d = nib.load(glob(path.join(subInDir, 'ses-*', 'func',
-                            f'sub-{sub}_ses-*_task-{task}_run-*_space-T1w_desc-preproc_bold.nii*'))[0])
+            boldref4d = nib.load(glob(path.join(subInDir, f'ses-{sess[0]}', 'func',
+                            f'sub-{sub}_ses-{sess[0]}_task-{task}_run-*_space-T1w_desc-preproc_bold.nii*'))[0])
 
             boldref = four_to_three(boldref4d)[0]
 
@@ -527,20 +527,20 @@ def reslice_atlas(atlas, sub, hemi, fsDir, hemiRibbon, boldref, num=0):
 
 
 if __name__ == "__main__":
-    sub = '001'
+    sub = 'h001'
     ses = ['001']
-    baseP = '/z/fmri/data/retcomp17BIDS'
+    baseP = '/z/fmri/data/stimsim23'
     bidsDir  = path.join(baseP, 'BIDS')
     layout   = bids.BIDSLayout(bidsDir)
-    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-customNoReslice', f'sub-{sub}')
-    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-02', f'sub-{sub}')
-    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-customNoReslice', 'sourcedata', 'freesurfer')
-    forceParams = ['wedge','wedgeHR']
+    subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-03', f'sub-{sub}')
+    fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', 'sourcedata', 'freesurfer')
+    forceParams = '' #['wedge','wedgeHR']
     fmriprepLegacyLayout = False
     average = True
     output_only_average = False
     atlases = ['benson','wang','lh.LOTS.annot','lh.litVWFA.annot','lh.motspots.annot','rh.LOTS.annot','rh.motspots.annot']
-    roisIn  = ['V1','V2','V3']
+    roisIn  = ['all']
     analysisSpace = 'volume'
     force   = False
     verbose = True
