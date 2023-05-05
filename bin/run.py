@@ -320,7 +320,8 @@ sp.call(f'cp {path.join(inDir,"dataset_description.json")} {outDir}', shell=True
 if customName:
     try:
         os.chdir(path.join(flywheelBase, 'output', 'prfprepare'))
-        os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
+        if not path.islink(f'analysis-{customName}'):
+            os.symlink(f'analysis-{analysis_number:02d}', f'analysis-{customName}')
     except:
         print(f'Could not create the custom_output_name analysis-{customName}')
 
