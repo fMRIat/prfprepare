@@ -3,8 +3,8 @@
 This repo is designed for a seamless experience of pRF mapping and is closing the gap between preprocessing (using e.g. fmriprep) and the pRF analysis (using github.com/vistalab/PRFmodel).
 
 #### INSTALL
-You can pull the latest docker: `docker pull davidlinhardt/prfprepare:1.0.3`  
-Or as singularity image:        `singularity build prfprepare_1.0.3.sif docker://davidlinhardt/prfprepare:1.0.3`
+You can pull the latest docker: `docker pull davidlinhardt/prfprepare:1.3.5`  
+Or as singularity image:        `singularity build prfprepare_1.3.5.sif docker://davidlinhardt/prfprepare:1.3.5`
 
 #### WORKFLOW
 The docker is built up in three stages:
