@@ -261,6 +261,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
                     if not path.isfile(newNiiP):
                         note(f"[nii_to_sufNii.py] Working on {path.basename(newNiiP)}...")
+                        skip = False
 
                         if 'av' not in str(run):
                             # load the .gii in fsnative
@@ -271,14 +272,23 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                     giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
 
                                 # get the data data
-                                data = nib.load(giiP).agg_data()
+                                try:
+                                    data = nib.load(giiP).agg_data()
+                                except FileNotFoundError:
+                                    print(f'File {giiP} not found, skipping...')
+                                    continue
 
                             # or volume file in T1 space
                             elif analysisSpace == 'volume':
+
                                 niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii*'))[0]
 
                                 # get the data
-                                data = np.asarray(nib.load(niiP).get_fdata())
+                                try:
+                                    data = np.asarray(nib.load(niiP).get_fdata())
+                                except FileNotFoundError:
+                                    print(f'File {niiP} not found, skipping...')
+                                    continue
 
                         else:
                             datas = []
@@ -288,15 +298,20 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                         giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
                                     else:
                                         giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
-
-                                    datas.append(nib.load(giiP).agg_data())
+                                    try:
+                                        datas.append(nib.load(giiP).agg_data())
+                                    except FileNotFoundError:
+                                        continue
 
                                 # or volume file in T1 space
                                 elif analysisSpace == 'volume':
                                     niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii*'))[0]
 
                                     # get the data data
-                                    datas.append(np.asarray(nib.load(niiP).get_fdata()))
+                                    try:
+                                        datas.append(np.asarray(nib.load(niiP).get_fdata()))
+                                    except FileNotFoundError:
+                                        continue
 
                             if len(datas) > 1:
                                 # crop them to the same length for averaging
@@ -305,74 +320,79 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 # average the runs
                                 data = np.mean(gii, 0)
                             else:
-                                data = datas[0]
+                                try:
+                                    data = np.array(datas[0])
+                                except IndexError:
+                                    print(f'No data found to average, skipping...')
+                                    skip = True
 
-                        # apply the combined ROI mask
-                        data = data[allROImask, :]
+                        if skip:
+                            # apply the combined ROI mask
+                            data = data[allROImask, :]
 
-                        # get rid of volumes where the stimulus showed only blank (prescanDuration)
-                        if forceParams:
-                            params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile),
-                                            simplify_cells=True)
-                        else:
-                            if 'av' not in str(run):
-                                params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
-                                                        f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat'),
+                            # get rid of volumes where the stimulus showed only blank (prescanDuration)
+                            if forceParams:
+                                params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile),
                                                 simplify_cells=True)
                             else:
-                                params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
-                                                        f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'),
-                                                simplify_cells=True)
+                                if 'av' not in str(run):
+                                    params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
+                                                            f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat'),
+                                                    simplify_cells=True)
+                                else:
+                                    params = loadmat(path.join(bidsDir, 'sourcedata', 'vistadisplog', f'sub-{sub}',
+                                                            f'ses-{ses}', f'sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat'),
+                                                    simplify_cells=True)
 
-                        tr = params['params']['tr']
+                            tr = params['params']['tr']
 
-                        if 'prescanDuration' in params['params'].keys():
-                            prescan = params['params']['prescanDuration']
+                            if 'prescanDuration' in params['params'].keys():
+                                prescan = params['params']['prescanDuration']
 
-                            if prescan > 0:
-                                note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
-                                data = data[:, int(prescan / tr):]
+                                if prescan > 0:
+                                    note(f'Removing {int(prescan/tr)} volumes from the beginning due to prescan')
+                                    data = data[:, int(prescan / tr):]
 
-                        else:
-                            prescan = 0
+                            else:
+                                prescan = 0
 
-                        # remove volumes the stimulus was wating to start (startScan)
-                        if 'startScan' in params['params'].keys():
-                            startScan = params['params']['startScan']
+                            # remove volumes the stimulus was wating to start (startScan)
+                            if 'startScan' in params['params'].keys():
+                                startScan = params['params']['startScan']
 
-                            if startScan  > 0:
-                                note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
-                                data = data[:, int(startScan / tr):]
+                                if startScan  > 0:
+                                    note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
+                                    data = data[:, int(startScan / tr):]
 
 
-                        # create and save new nii img
-                        try:
-                            apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
-                            stimNii = nib.load(apertures[[f'task-{task}_' in ap for ap in apertures]].item())
-                        except:
-                            print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
-                            continue
+                            # create and save new nii img
+                            try:
+                                apertures = np.array(glob(path.join(outP, 'stimuli', 'task-*_apertures.nii.gz')))
+                                stimNii = nib.load(apertures[[f'task-{task}_' in ap for ap in apertures]].item())
+                            except:
+                                print(f'could not find task-{task} in {path.join(outP, "stimuli")}!')
+                                continue
 
-                        # trim data to stimulus length, gets rid of volumes when the
-                        # scanner was running for longer than the task and is topped manually
-                        stimLength = stimNii.shape[-1]
-                        if data.shape[1] < stimLength:
-                            die(f'For {path.basename(newNiiP)} the data is shorter than '
-                                F'the simulus file ({data.shape[1]}<{stimLength})')
-                        elif data.shape[1] > stimLength:
-                            data = data[:, :stimLength]
-                        else:
-                            pass
+                            # trim data to stimulus length, gets rid of volumes when the
+                            # scanner was running for longer than the task and is topped manually
+                            stimLength = stimNii.shape[-1]
+                            if data.shape[1] < stimLength:
+                                die(f'For {path.basename(newNiiP)} the data is shorter than '
+                                    F'the simulus file ({data.shape[1]}<{stimLength})')
+                            elif data.shape[1] > stimLength:
+                                data = data[:, :stimLength]
+                            else:
+                                pass
 
-                        # save the new nifti
-                        newNii = nib.Nifti2Image(data[:, None, None, :].astype('float32'), affine=np.eye(4))
-                        newNii.header['pixdim'] = stimNii.header['pixdim']
-                        newNii.header['qoffset_x'] = 1
-                        newNii.header['qoffset_y'] = 1
-                        newNii.header['qoffset_z'] = 1
-                        newNii.header['cal_max'] = 1
-                        newNii.header['xyzt_units'] = 10
-                        nib.save(newNii, newNiiP)
+                            # save the new nifti
+                            newNii = nib.Nifti2Image(data[:, None, None, :].astype('float32'), affine=np.eye(4))
+                            newNii.header['pixdim'] = stimNii.header['pixdim']
+                            newNii.header['qoffset_x'] = 1
+                            newNii.header['qoffset_y'] = 1
+                            newNii.header['qoffset_z'] = 1
+                            newNii.header['cal_max'] = 1
+                            newNii.header['xyzt_units'] = 10
+                            nib.save(newNii, newNiiP)
 
 
 
