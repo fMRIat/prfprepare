@@ -20,9 +20,10 @@
 # 1.3.3 fixed forceParams when multiple tasks are present
 # 1.3.4 conda update
 # 1.3.5 and again downgrade to python=3.8 and numpy<1.20
+# 1.3.6 just skip files that are found in the BIDS folder but not in fmriprep
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=dev #1.3.5
+VERSION=1.3.6
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
