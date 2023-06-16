@@ -16,9 +16,9 @@ The docker is built up in three stages:
 For running prfprepare you need to provide the following folder structure:  
 
 <BASE_DIR>/BIDS has to contain:  
- -) the preprocessed data in fsnative space and the corresponding freesurfer segmenataion (fmriprep output in analysis-XX) 
- -) the log file from vistadisp   
- -) unprocessed subject data in BIDS-compatible format (e.g. from heudiconv)  
+ -) the preprocessed data in fsnative space (for analysis_space=fsnative) or T1w space (for analysis_type=volume) and the corresponding freesurfer segmenataion (fmriprep output BIDS/derivatives/fmriprep/analysis-XX) 
+ -) the log file from vistadisp (in BIDS/derivatives/sourcedata/vistadisplog/sub-XX/ses-XX) and the stimulus images (in BIDS/derivatives/sourcedata/stimuli)
+ -) unprocessed subject data in BIDS-compatible format (e.g. from heudiconv) for the BIDS layout
  
  <BASE_DIR>/BIDS/
 ![image](https://user-images.githubusercontent.com/41369769/166925490-30f03cb6-9baf-42c3-bdf1-e9c89c56d3dd.png)
