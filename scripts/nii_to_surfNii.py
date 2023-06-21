@@ -274,20 +274,22 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                                 # get the data data
                                 try:
                                     data = nib.load(giiP).agg_data()
-                                except FileNotFoundError:
+                                except IndexError as error:
                                     print(f'File {giiP} not found, skipping...')
                                     continue
 
                             # or volume file in T1 space
                             elif analysisSpace == 'volume':
 
-                                niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii*'))[0]
-
                                 # get the data
                                 try:
+                                    niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-T1w_desc-preproc_bold.nii*'))[0]
                                     data = np.asarray(nib.load(niiP).get_fdata())
                                 except FileNotFoundError:
                                     print(f'File {niiP} not found, skipping...')
+                                    continue
+                                except IndexError:
+                                    print(f'File not found, skipping...')
                                     continue
 
                         else:
@@ -305,12 +307,16 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                                 # or volume file in T1 space
                                 elif analysisSpace == 'volume':
-                                    niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii*'))[0]
 
                                     # get the data data
                                     try:
+                                        niiP = glob(path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-T1w_desc-preproc_bold.nii*'))[0]
                                         datas.append(np.asarray(nib.load(niiP).get_fdata()))
                                     except FileNotFoundError:
+                                        print(f'File {niiP} not found, skipping...')
+                                        continue
+                                    except IndexError:
+                                        print(f'File not found, skipping...')
                                         continue
 
                             if len(datas) > 1:
@@ -322,11 +328,11 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             else:
                                 try:
                                     data = np.array(datas[0])
-                                except IndexError:
+                                except IndexError as error:
                                     print(f'No data found to average, skipping...')
                                     skip = True
 
-                        if skip:
+                        if not skip:
                             # apply the combined ROI mask
                             data = data[allROImask, :]
 
@@ -360,7 +366,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             if 'startScan' in params['params'].keys():
                                 startScan = params['params']['startScan']
 
-                                if startScan  > 0:
+                                if startScan > 0:
                                     note(f'Removing {int(startScan/tr)} volumes from the beginning due to startScan')
                                     data = data[:, int(startScan / tr):]
 
@@ -547,13 +553,13 @@ def reslice_atlas(atlas, sub, hemi, fsDir, hemiRibbon, boldref, num=0):
 
 
 if __name__ == "__main__":
-    sub = 'h001'
-    ses = ['001']
-    baseP = '/z/fmri/data/stimsim23'
+    sub = '002'
+    ses = ['01']
+    baseP = '/local/dlinhardt/temp/helen'
     bidsDir  = path.join(baseP, 'BIDS')
     layout   = bids.BIDSLayout(bidsDir)
     subInDir = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', f'sub-{sub}')
-    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-03', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-01', f'sub-{sub}')
     fsDir    = path.join(baseP, 'derivatives', 'fmriprep', 'analysis-01', 'sourcedata', 'freesurfer')
     forceParams = '' #['wedge','wedgeHR']
     fmriprepLegacyLayout = False
