@@ -50,8 +50,19 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
     # go through all param files and creat stimuli from them
     for logP in logPs:
-        stim  = path.basename(loadmat(logP, simplify_cells=True)['params']['loadMatrix'])
-        stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
+        try:
+            stim  = path.basename(loadmat(logP, simplify_cells=True)['params']['loadMatrix'])
+        except TypeError:
+            stimP = glob(path.join(bidsDir, 'sourcedata', 'stimuli', '*.mat'))
+            if len(stimP) == 1:
+                stimP = stimP[0]
+                print('There is no stimulus file defined in the params file (params.loadMatrix)!')
+                print(f'We will use the only stimulus file we found: {stimP}!')
+            elif len(stimP) > 1:
+                print('There is no stimulus file defined in the params file (params.loadMatrix)!')
+                print('We found more than one stimulus file in the stimuli folder, please define one in the prams or remove all but one in the stimuli folder!')
+        else:
+            stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
 
         if forceParams:
             task = forceTask
@@ -225,11 +236,11 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
 
 
 if __name__ == "__main__":
-    sub = 'h001'
-    ses = ['001']
-    baseP = '/z/fmri/data/stimsim23'
+    sub = '002'
+    ses = ['01']
+    baseP = '/local/dlinhardt/temp/helen'
     bidsDir  = path.join(baseP, 'BIDS')
-    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-03', f'sub-{sub}')
+    outP     = path.join(baseP, 'derivatives', 'prfprepare', 'analysis-01', f'sub-{sub}')
     forceParams = '' #['wedge','wedgeHR']
     etcorr = False
     use_numImages = False
