@@ -21,9 +21,10 @@
 # 1.3.4 conda update
 # 1.3.5 and again downgrade to python=3.8 and numpy<1.20
 # 1.3.6 just skip files that are found in the BIDS folder but not in fmriprep
+# 1.3.7 define what is happening if no params.loadMatrix is defined
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.3.6
+VERSION=1.4.0
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
