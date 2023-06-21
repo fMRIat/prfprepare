@@ -2,13 +2,15 @@ name: scientific
 channels:
   - conda-forge
 dependencies:
-  - python=3.10
-  - numpy
-  - scipy
-  - nilearn
-  - nibabel
-  - jupyter
+  - python=3.10.11
+  - numpy=1.25.0
+  - scipy=1.10.1
+  - nilearn=0.10.1
+  - nibabel=5.1.0
+  - jupyter=1.0.0
   - pip
   - pip:
-    - pybids
-    - neuropythy
+    - pybids==0.16.1
+    - neuropythy==0.12.11
+    - pint==0.20.1
+prefix: /opt/conda/envs/scientific
