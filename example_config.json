@@ -1,9 +1,9 @@
 {
-    "subjects"                : "h003",
-    "sessions"                : "[001]",
+    "subjects"                : "all",
+    "sessions"                : "all",
     "etcorrection"            : false,
     "force"                   : false,
-    "custom_output_name"      : "fmriprep_surf",
+    "custom_output_name"      : "",
     "fmriprep_legacy_layout"  : false,
     "forceParams"             : "",
     "use_numImages"           : false,
