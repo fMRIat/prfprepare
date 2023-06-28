@@ -38,7 +38,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
         logPs = [path.join(bidsDir, 'sourcedata', 'vistadisplog', forceParamsFile)]
     else:
         logPs = np.array(glob(path.join(bidsDir, 'sourcedata', 'vistadisplog',
-                                        f'sub-{sub}', '*', '*1_params.mat')))
+                                        f'sub-{sub}', 'ses-*', '*1_params.mat')))
 
     # check if we found params files
     if len(logPs) == 0:
@@ -117,7 +117,7 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                 idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
 
             oStimVid = images[:, :, seq[idx] - 1]
-            note(f'Using params.numImages= {numImages}, idx.shape: {idx.shape}, '
+            note(f'Using numImages= {numImages}, idx.shape: {idx.shape}, '
                  f'oStimVid.shape: {oStimVid.shape}')
 
             # remove prescanDuration from stimulus
