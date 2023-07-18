@@ -143,6 +143,8 @@ atlases = config2list(config['config']['atlases'])
 if atlases[0] == 'all':
     atlases = ['benson', 'wang', 'fs_custom']
 
+if areas[0] == 'fullBrain':
+    atlases = ['fullBrain']
 
 # check if there is the custom.zip, if yes unzip
 if 'fs_custom' in atlases:

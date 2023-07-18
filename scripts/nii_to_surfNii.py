@@ -60,25 +60,36 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
             # loop over all defined atlases
             for atlas in atlases:
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
-                                           allROImask, analysisSpace, verbose)
+                if atlas != 'fullBrain':
+                    allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
+                                            allROImask, analysisSpace, verbose)
 
             # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
-                                                                roisIn, analysisSpace,
-                                                                verbose)
+                if atlas == 'fullBrain':
+                    atlasName = 'fullBrain'
+                    areaLabels = {'fullBrain': -1}
+                    rois = ['fullBrain']
+                    areas = [-1]
+                else:
+                # load in the atlas
+                    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
+                                                                    roisIn, analysisSpace,
+                                                                    verbose)
 
                 # go for all given ROIs
                 for roi in rois:
                     # if we want fullBrain change the mask to all ones
-                    if roi == 'fullBrain':
-                        allROImask = np.ones(allROImask.shape)
+                    hemi_str = hemi
 
-                    # else we adapt the mask for the roi
+                    if roi == 'fullBrain':
+                        thisROImask = np.ones(allROImask.shape)
+                        allROImask  = np.ones(allROImask.shape)
+
                     else:
+                        # else we adapt the mask for the roi
                         # get labels associated with ROI
                         roiLabels = [value for key, value in areaLabels.items() if roi in key]
 
@@ -87,48 +98,48 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                         thisROImask = np.any([areas==lab for lab in roiLabels], 0)
 
-                        # define a list of all appliccable boldFiles
-                        for sesI, ses in enumerate(sess):
-                            boldFiles = []
-                            funcOutP = path.join(outP, f'ses-{ses}', 'func')
-                            makedirs(funcOutP, exist_ok=True)
+                    # define a list of all appliccable boldFiles
+                    for sesI, ses in enumerate(sess):
+                        boldFiles = []
+                        funcOutP = path.join(outP, f'ses-{ses}', 'func')
+                        makedirs(funcOutP, exist_ok=True)
 
+                        jsonP = path.join(funcOutP,
+                                    f'sub-{sub}_ses-{ses}_hemi-{hemi_str.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
+                        if not path.isfile(jsonP):
+
+                            if forceParams:
+                                tasks = [forceTask]
+                            else:
+                                tasks = layout.get_tasks(subject=sub, session=ses)
+
+                            for task in tasks:
+                                runs = layout.get_runs(subject=sub, session=ses, task=task)
+
+                                # adapt for averaged runs
+                                if average and len(runs) > 1:
+                                    if output_only_average:
+                                        runs = [''.join(map(str, runs)) + 'avg']
+                                    else:
+                                        runs.append(''.join(map(str, runs)) + 'avg')
+                                for run in runs:
+                                    boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi_str.upper()}_bold.nii.gz')
+
+                            # define the json  for this specific atlas-roi combi for one subject and session
                             jsonP = path.join(funcOutP,
-                                        f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
-                            if not path.isfile(jsonP):
-
-                                if forceParams:
-                                    tasks = [forceTask]
-                                else:
-                                    tasks = layout.get_tasks(subject=sub, session=ses)
-
-                                for task in tasks:
-                                    runs = layout.get_runs(subject=sub, session=ses, task=task)
-
-                                    # adapt for averaged runs
-                                    if average and len(runs) > 1:
-                                        if output_only_average:
-                                            runs = [''.join(map(str, runs)) + 'avg']
-                                        else:
-                                            runs.append(''.join(map(str, runs)) + 'avg')
-                                    for run in runs:
-                                        boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
-
-                                # define the json  for this specific atlas-roi combi for one subject and session
-                                jsonP = path.join(funcOutP,
-                                            f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
-                                jsonI = {'atlas': atlasName,
-                                        'roi': roi,
-                                        'hemisphere': hemi,
-                                        'thisHemiSize': int(allROImask.sum()),
-                                        'boldFiles': boldFiles,
-                                        'roiIndFsnative': np.where(thisROImask)[0].tolist(),
-                                        'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
-                                        }
-                                if len(jsonI['roiIndFsnative']) != len(jsonI['roiIndBold']):
-                                    die('Something wrong with the Indices!!')
-                                with open(jsonP, 'w') as fl:
-                                    json.dump(jsonI, fl, indent=4)
+                                        f'sub-{sub}_ses-{ses}_hemi-{hemi_str.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
+                            jsonI = {'atlas': atlasName,
+                                    'roi': roi,
+                                    'hemisphere': hemi,
+                                    'thisHemiSize': int(allROImask.sum()),
+                                    'boldFiles': boldFiles,
+                                    'roiIndFsnative': np.where(thisROImask)[0].tolist(),
+                                    'roiIndBold': np.where(thisROImask[allROImask.astype(bool)])[0].tolist()
+                                    }
+                            if len(jsonI['roiIndFsnative']) != len(jsonI['roiIndBold']):
+                                die('Something wrong with the Indices!!')
+                            with open(jsonP, 'w') as fl:
+                                json.dump(jsonI, fl, indent=4)
 
         elif analysisSpace == 'volume':
             # load the GM mask from freesurfer for the receptive hemi
@@ -148,39 +159,52 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
             allROImask = np.zeros(boldref.shape)
 
             for atlas in atlases:
-                if atlas not in ['benson','wang']:
-                    print('With analysisSpace==volume you can only use atlases [benson, wang]!')
+                if atlas not in ['benson','wang','fullBrain']:
+                    print('With analysisSpace==volume you can only use atlases [benson, wang, fullBrain]!')
+                    atlases.remove(atlas)
                     continue
 
-                resDilRibbonShape = reslice_atlas(atlas, sub, hemi, fsDir,
-                                                hemiRibbon, boldref)
-
-                resDilRibbonNum = 0
-                while resDilRibbonShape != allROImask.shape:
-                    resDilRibbonNum += 1
+                if atlas != 'fullBrain':
                     resDilRibbonShape = reslice_atlas(atlas, sub, hemi, fsDir,
-                                                    hemiRibbon, boldref, resDilRibbonNum)
+                                                    hemiRibbon, boldref)
 
-                allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
-                                        allROImask, analysisSpace, verbose,
-                                        resDilRibbonNum)
+                    resDilRibbonNum = 0
+                    while resDilRibbonShape != allROImask.shape:
+                        resDilRibbonNum += 1
+                        resDilRibbonShape = reslice_atlas(atlas, sub, hemi, fsDir,
+                                                        hemiRibbon, boldref, resDilRibbonNum)
+
+                    allROImask = getAllROImask(sub, fsDir, atlas, roisIn, hemi,
+                                            allROImask, analysisSpace, verbose,
+                                            resDilRibbonNum)
 
             # define the json files for the found mask
             # loop over all defined atlases
             for atlas in atlases:
                 # load in the atlas
-                areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
-                                                                roisIn, analysisSpace,
-                                                                verbose, resDilRibbonNum)
+                if atlas == 'fullBrain':
+                    atlasName = 'fullBrain'
+                    areaLabels = {'fullBrain': -1}
+                    rois = ['fullBrain']
+                    areas = [-1]
+                else:
+                    areas, areaLabels, rois, atlasName = load_atlas(atlas, fsDir, sub, hemi,
+                                                                    roisIn, analysisSpace,
+                                                                    verbose, resDilRibbonNum)
 
                 # go for all given ROIs
                 for roi in rois:
                     # if we want fullBrain change the mask to all ones
                     if roi == 'fullBrain':
-                        allROImask = np.ones(allROImask.shape)
-
-                    # else we adapt the mask for the roi
+                        if hemi == 'r':
+                            continue
+                        hemi_str = 'both'
+                        thisROImask = np.ones(allROImask.shape)
+                        allROImask  = np.ones(allROImask.shape)
                     else:
+                        hemi_str = hemi
+
+                        # else we adapt the mask for the roi
                         # get labels associated with ROI
                         roiLabels = [value for key, value in areaLabels.items() if roi in key]
 
@@ -189,45 +213,45 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                         thisROImask = np.any([areas==lab for lab in roiLabels], 0)
 
-                        # define a list of all appliccable boldFiles
-                        for sesI, ses in enumerate(sess):
-                            boldFiles = []
-                            funcOutP = path.join(outP, f'ses-{ses}', 'func')
-                            makedirs(funcOutP, exist_ok=True)
+                    # define a list of all appliccable boldFiles
+                    for sesI, ses in enumerate(sess):
+                        boldFiles = []
+                        funcOutP = path.join(outP, f'ses-{ses}', 'func')
+                        makedirs(funcOutP, exist_ok=True)
 
-                            jsonP = path.join(funcOutP,
-                                        f'sub-{sub}_ses-{ses}_hemi-{hemi.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
-                            if not path.isfile(jsonP):
+                        jsonP = path.join(funcOutP,
+                                    f'sub-{sub}_ses-{ses}_hemi-{hemi_str.upper()}_desc-{roi}-{atlasName}_maskinfo.json')
+                        if not path.isfile(jsonP):
 
-                                if forceParams:
-                                    tasks = [forceTask]
-                                else:
-                                    tasks = layout.get_tasks(subject=sub, session=ses)
+                            if forceParams:
+                                tasks = [forceTask]
+                            else:
+                                tasks = layout.get_tasks(subject=sub, session=ses)
 
-                                for task in tasks:
-                                    runs = layout.get_runs(subject=sub, session=ses, task=task)
+                            for task in tasks:
+                                runs = layout.get_runs(subject=sub, session=ses, task=task)
 
-                                    # adapt for averaged runs
-                                    if average and len(runs) > 1:
-                                        if output_only_average:
-                                            runs = [''.join(map(str, runs)) + 'avg']
-                                        else:
-                                            runs.append(''.join(map(str, runs)) + 'avg')
-                                    for run in runs:
-                                        boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+                                # adapt for averaged runs
+                                if average and len(runs) > 1:
+                                    if output_only_average:
+                                        runs = [''.join(map(str, runs)) + 'avg']
+                                    else:
+                                        runs.append(''.join(map(str, runs)) + 'avg')
+                                for run in runs:
+                                    boldFiles.append(f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi_str.upper()}_bold.nii.gz')
 
-                                # define the json  for this specific atlas-roi combi for one subject and session
-                                jsonI = {'atlas': atlasName,
-                                        'roi': roi,
-                                        'hemisphere': hemi,
-                                        'thisHemiSize': int(allROImask.sum()),
-                                        'boldFiles': boldFiles,
-                                        'origImageSize': list(allROImask.shape),
-                                        'roiPos3D': np.array(np.where(thisROImask)).T.tolist(),
-                                        'roiIndBold': np.where(thisROImask[allROImask])[0].tolist()
-                                        }
-                                with open(jsonP, 'w') as fl:
-                                    json.dump(jsonI, fl, indent=4)
+                            # define the json  for this specific atlas-roi combi for one subject and session
+                            jsonI = {'atlas': atlasName,
+                                    'roi': roi,
+                                    'hemisphere': hemi,
+                                    'thisHemiSize': int(allROImask.sum()),
+                                    'boldFiles': boldFiles,
+                                    'origImageSize': list(allROImask.shape),
+                                    'roiPos3D': np.array(np.where(thisROImask)).T.tolist(),
+                                    'roiIndBold': np.where(thisROImask[allROImask.astype(bool)])[0].tolist()
+                                    }
+                            with open(jsonP, 'w') as fl:
+                                json.dump(jsonI, fl, indent=4)
 
         else:
             die(f'Your analysisSpace {analysisSpace} is not supported! '
@@ -235,7 +259,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
         # now lets apply the merged mask to all bold files
         for sesI, ses in enumerate(sess):
-            # note(f'[nii_to_sufNii.py] Working on sub-{sub} ses-{ses} hemi-{hemi.upper()}')
+            # note(f'[nii_to_sufNii.py] Working on sub-{sub} ses-{ses} hemi-{hemi_str.upper()}')
             funcInP = path.join(subInDir, f'ses-{ses}', 'func')
             funcOutP = path.join(outP, f'ses-{ses}', 'func')
 
@@ -258,7 +282,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                     # if not path.exists(newNiiP) or force:
 
                     # name the output files
-                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz')
+                    newNiiP = path.join(funcOutP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi_str.upper()}_bold.nii.gz')
                     if not path.isfile(newNiiP):
                         note(f"[nii_to_sufNii.py] Working on {path.basename(newNiiP)}...")
                         skip = False
@@ -267,9 +291,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             # load the .gii in fsnative
                             if analysisSpace == 'fsnative':
                                 if fmriprepLegacyLayout:
-                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_space-fsnative_hemi-{hemi_str.upper()}_bold.func.gii')
                                 else:
-                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                                    giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi_str.upper()}_space-fsnative_bold.func.gii')
 
                                 # get the data data
                                 try:
@@ -297,9 +321,9 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
                             for r in runsOrig:
                                 if analysisSpace == 'fsnative':
                                     if fmriprepLegacyLayout:
-                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi.upper()}_bold.func.gii')
+                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_space-fsnative_hemi-{hemi_str.upper()}_bold.func.gii')
                                     else:
-                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi.upper()}_space-fsnative_bold.func.gii')
+                                        giiP = path.join(funcInP, f'sub-{sub}_ses-{ses}_task-{task}_run-{r}_hemi-{hemi_str.upper()}_space-fsnative_bold.func.gii')
                                     try:
                                         datas.append(nib.load(giiP).agg_data())
                                     except FileNotFoundError:
@@ -334,7 +358,7 @@ def nii_to_surfNii(sub, sess, layout, bidsDir, subInDir, outP, fsDir, forceParam
 
                         if not skip:
                             # apply the combined ROI mask
-                            data = data[allROImask, :]
+                            data = data[allROImask.astype(bool), :]
 
                             # get rid of volumes where the stimulus showed only blank (prescanDuration)
                             if forceParams:
@@ -421,21 +445,15 @@ def getAllROImask(sub, fsDir, atlas, roisIn, hemi, allROImask,
 
     # go for all given ROIs
     for roi in rois:
-        # if we want fullBrain change the mask to all ones
-        if roi == 'fullBrain':
-            allROImask = np.ones(allROImask.shape)
+        # get labels associated with ROI
+        roiLabels = [value for key, value in areaLabels.items() if roi in key]
 
-        # else we adapt the mask for the roi
-        else:
-            # get labels associated with ROI
-            roiLabels = [value for key, value in areaLabels.items() if roi in key]
+        if not roiLabels:
+            note(f'We could not find {roi} in atlas {atlas}, continue...')
+            continue
 
-            if not roiLabels:
-                note(f'We could not find {roi} in atlas {atlas}, continue...')
-                continue
-
-            thisROImask = np.any([areas==lab for lab in roiLabels], 0)
-            allROImask = np.any((allROImask, thisROImask), 0)
+        thisROImask = np.any([areas==lab for lab in roiLabels], 0)
+        allROImask = np.any((allROImask, thisROImask), 0)
     return allROImask
 
 
@@ -515,11 +533,6 @@ def load_atlas(atlas, fsDir, sub, hemi, rois, analysisSpace,
         else:
             return [], [], [], []
 
-    elif atlas in ['none', 'fullBrain']:
-        labelNames = 'fullBrain'
-        areaLabels = {'fullBrain': -1}
-        rois = ['fullBrain']
-
     else:
         die(f'You specified a wrong atlas ({atlas}), please choose from [benson, wang, fs_custom]!')
 
@@ -565,8 +578,8 @@ if __name__ == "__main__":
     fmriprepLegacyLayout = False
     average = True
     output_only_average = False
-    atlases = ['benson','wang','lh.LOTS.annot','lh.litVWFA.annot','lh.motspots.annot','rh.LOTS.annot','rh.motspots.annot']
-    roisIn  = ['all']
+    atlases = ['benson','fullBrain'] #['benson','wang','lh.LOTS.annot','lh.litVWFA.annot','lh.motspots.annot','rh.LOTS.annot','rh.motspots.annot']
+    roisIn  = ['fullBrain']
     analysisSpace = 'volume'
     force   = False
     verbose = True
