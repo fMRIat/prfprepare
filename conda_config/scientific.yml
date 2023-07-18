@@ -11,6 +11,6 @@ dependencies:
   - pip
   - pip:
     - pybids==0.16.1
-    - neuropythy==0.12.11
-    - pint==0.20.1
+    - neuropythy==0.12.12
+    - pimms==0.3.23
 prefix: /opt/conda/envs/scientific
