@@ -154,8 +154,20 @@ def stim_as_nii(sub, sess, bidsDir, outP, etcorr, forceParams, use_numImages, fo
                                             f'sub-{sub}', f'ses-{ses}', '*_params.mat')))
 
             for logP in logPs:
-                stim = loadmat(logP, simplify_cells=True)['LoadStimName']
-                stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim + '.mat')
+                try:
+                    stim  = path.basename(loadmat(logP, simplify_cells=True)['params']['loadMatrix'])
+                except TypeError:
+                    stimP = glob(path.join(bidsDir, 'sourcedata', 'stimuli', '*.mat'))
+                    if len(stimP) == 1:
+                        stimP = stimP[0]
+                        print('There is no stimulus file defined in the params file (params.loadMatrix)!')
+                        print(f'We will use the only stimulus file we found: {stimP}!')
+                    elif len(stimP) > 1:
+                        print('There is no stimulus file defined in the params file (params.loadMatrix)!')
+                        print('We found more than one stimulus file in the stimuli folder, please define one in the prams or remove all but one in the stimuli folder!')
+                else:
+                    stimP = path.join(bidsDir, 'sourcedata', 'stimuli', stim)
+
                 if forceParams:
                     task = forceTask
                 else:
