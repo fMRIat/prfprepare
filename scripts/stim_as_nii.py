@@ -182,9 +182,7 @@ def stim_as_nii(
                 )
 
                 # save the stimulus as nifti
-                img = nib.Nifti1Image(
-                    oStimVid[:, :, None, :].astype("float16"), np.eye(4)
-                )
+                img = nib.Nifti1Image(oStimVid[:, :, None, :].astype(float), np.eye(4))
                 img.header["pixdim"][1:5] = [1, 1, 1, tr]
                 img.header["qoffset_x"] = img.header["qoffset_y"] = img.header[
                     "qoffset_z"
@@ -345,7 +343,7 @@ def stim_as_nii(
 
                         # save the stimulus as nifti
                         img = nib.Nifti1Image(
-                            oStimVid[:, :, None, :].astype("float16"), np.eye(4)
+                            oStimVid[:, :, None, :].astype(float), np.eye(4)
                         )
                         img.header["pixdim"][1:5] = [1, 1, 1, tr]
                         img.header["qoffset_x"] = img.header["qoffset_y"] = img.header[
