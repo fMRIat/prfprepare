@@ -133,7 +133,7 @@ else:
     # check if it is bids valid
     specific_laypout = layout.derivatives[f'derivatives/fmriprep-{fmriprepAnalysis}']
     name=specific_laypout.root.split('/')[-1]
-    inDir = path.join(flywheelBase, "output", f"{name})
+    inDir = path.join(flywheelBase, "output", f"{name}")
 
 note(f"Loading data from {inDir}")
 
