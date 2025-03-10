@@ -6,4 +6,4 @@ docker.tar
 .nfs*
 *.sif
 .vscode/launch.json
-conda_config/scientific_free.yml
+config_files/scientific_free.yml
