@@ -10,9 +10,6 @@ if [ "$1" = "DEBUG" ]
 elif [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "-help" ] || [ "$1" = "help" ]
     then cat /opt/help.txt
     exit 0
-else
-    source /opt/conda/etc/profile.d/conda.sh
-    conda activate scientific
 fi
 
 
@@ -25,42 +22,8 @@ CONTAINER="[${REPO}/$GEAR]"
 echo -e "$CONTAINER  Initiated"
 set -e
 
-
 VERBOSE=0
 FORCE=0 # 1 for force overwrite
-
-###############################################################################
-# Configure Freesurfer
-
-export OS=Linux
-export FS_OVERRIDE=0
-export FIX_VERTEX_AREA=
-export FSF_OUTPUT_FORMAT=nii.gz
-export MNI_DIR=/opt/freesurfer/mni
-export LOCAL_DIR=/opt/freesurfer/local
-export FREESURFER_HOME=/opt/freesurfer
-export FSFAST_HOME=/opt/freesurfer/fsfast
-export MINC_BIN_DIR=/opt/freesurfer/mni/bin
-export MINC_LIB_DIR=/opt/freesurfer/mni/lib
-export MNI_DATAPATH=/opt/freesurfer/mni/data
-export FMRI_ANALYSIS_DIR=/opt/freesurfer/fsfast
-export PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
-export MNI_PERL5LIB=/opt/freesurfer/mni/lib/perl5/5.8.5
-export XAPPLRESDIR=/opt/freesurfer/MCRv84/X11/app-defaults
-export PATH=/opt/freesurfer/bin:/opt/freesurfer/fsfast/bin
-export PATH=$PATH:/opt/freesurfer/tktools:/opt/freesurfer/mni/bin
-export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-export PATH=$PATH:/sbin:/bin
-###############################################################################
-#
-
-# source FreeSurferEnv.sh then set subjects_dir
-/bin/bash -c 'source $FREESURFER_HOME/FreeSurferEnv.sh &>/dev/null'
-
-export SUBJECTS_DIR=${OUTPUT_DIR}
-
-# Pass the license when calling docker/singularity, Singularity does not allow to write within the machine and furthermore this way of working goes against Freesurfer's license
-# echo "j.gutierrez@bcbl.eu 18112 *CKoktUM2tKG.  FSrcfSWoDhLJE" >> $FREESURFER_HOME/license.txt
 
 # Built to flywheel-v0 spec.
 FLYWHEEL_BASE=/flywheel/v0
@@ -80,9 +43,7 @@ function die {
     exit 1
 }
 
-
 # Process Arguments ############################################################
-
 while [ "$#" -gt 0 ]
 do   case "$1"
      in "--help"|"-h")
@@ -104,20 +65,13 @@ do   case "$1"
      esac
      shift
 done
-# Run the conda config again, to be sure we are using the right python
-conda deactivate
-source /opt/conda/etc/profile.d/conda.sh
-conda activate scientific
-python --version
 
 # Main Script ##################################################################
-
 # If no input is given we exit
 [ -r "$CONFIG_FILE" ] || {
-    note "No config file found. Please provide one!"
+    echo "No config file found. Please provide one!"
     exit 0
 }
-
 
 # otherwise, we run the following python code to parse the json and run the
 # /solve.sh script!
@@ -131,7 +85,6 @@ python ${FLYWHEEL_BASE}/run.py "$CONFIG_FILE" || die "Python startup script fail
 # which should be linked to /running/out
 [ -d $OUTPUT_DIR ] || die "Python startup script failed to make output link!"
 
-
 # Handle permissions of the outputs
 cd /flywheel/v0/output
 find "$OUTPUT_DIR/prfprepare" -type d -exec chmod 777 '{}' ';'
@@ -139,6 +92,3 @@ find "$OUTPUT_DIR/prfprepare" -type f -exec chmod 666 '{}' ';'
 
 # we don't have any post-processing to do at this point (but later we might)
 exit 0
-
-
-

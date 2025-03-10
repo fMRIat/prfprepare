@@ -1,22 +1,59 @@
-# This Dockerfile constructs a docker image, based on the vistalab/freesurfer
-# docker image to execute recon-all as a Flywheel Gear.
-#
-# Example build:
-#   docker build --no-cache --tag scitran/freesurfer-recon-all `pwd`
-#
-# Example usage:
-#   docker run -v /path/to/your/subject:/input scitran/freesurfer-recon-all
-#
-FROM ubuntu:focal
+ARG BASE_IMAGE=ubuntu:noble
+
+#############################
+# Download stages
+#############################
+
+# Utilities for downloading packages
+FROM ${BASE_IMAGE} AS downloader
+
+RUN apt update && \
+    apt install -y --no-install-recommends \
+                    binutils \
+                    bzip2 \
+                    ca-certificates \
+                    curl \
+                    unzip && \
+    apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# FreeSurfer 7.3.2
+FROM downloader AS freesurfer
+COPY config_files/freesurfer7.3.2-exclude.txt /usr/local/etc/freesurfer7.3.2-exclude.txt
+RUN curl -sSL https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-ubuntu22_amd64-7.3.2.tar.gz \
+     | tar zxv --no-same-owner -C /opt --exclude-from=/usr/local/etc/freesurfer7.3.2-exclude.txt
+
+# Micromamba
+FROM downloader AS micromamba
+# Install a C compiler to build extensions when needed.
+# traits<6.4 wheels are not available for Python 3.11+, but build easily.
+RUN apt update && \
+    apt install -y --no-install-recommends build-essential && \
+    apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+COPY config_files/scientific.yml /tmp/scientific.yml
+WORKDIR /tmp
+RUN micromamba create -y -f /tmp/scientific.yml && \
+    micromamba clean -y -a
+
+# Put conda in path so we can use conda activate
+ENV PATH="/opt/conda/envs/scientific/bin:$PATH" \
+      UV_USE_IO_URING=0
+
+#############################
+# Main stage
+#############################
+FROM ${BASE_IMAGE} AS prfprepare
 
 # Make directory for flywheel spec (v0)
-ENV FLYWHEEL /flywheel/v0
+ENV FLYWHEEL=/flywheel/v0
 RUN mkdir -p ${FLYWHEEL}
 WORKDIR ${FLYWHEEL}
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt update --fix-missing \
- && apt install -y wget bzip2 ca-certificates \
+ && apt install -y --no-install-recommends \
       libglib2.0-0 \
       libxext6 \
       libsm6 \
@@ -24,7 +61,6 @@ RUN apt update --fix-missing \
       git \
       mercurial \
       subversion \
-      curl \
       grep \
       sed \
       dpkg \
@@ -34,64 +70,59 @@ RUN apt update --fix-missing \
       zlib1g-dev \
       libgl1-mesa-dev \
       libfftw3-dev \
-      libtiff5-dev
-RUN apt install -y \
+      libtiff5-dev \
       libxt6 \
       libxcomposite1 \
       libfontconfig1 \
-      libasound2 \
+      libasound2t64 \
       bc \
-      tar \
-      zip \
-      unzip \
       tcsh \
       libgomp1 \
       python3-pip \
-      perl-modules
-
-####################################
-
-
-
-############################
-# Install dependencies
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt update && apt install -y \
-    xvfb \
-    xfonts-100dpi \
-    xfonts-75dpi \
-    xfonts-cyrillic \
-    python \
-    imagemagick \
-    wget \
-    subversion\
-    vim
-
-# Install Freesurfer
-RUN wget -N -qO- ftp://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.3.2/freesurfer-linux-ubuntu20_amd64-7.3.2.tar.gz | tar -xz -C /opt && chown -R root:root /opt/freesurfer && chmod -R a+rx /opt/freesurfer
+      perl-modules \
+      xvfb \
+      xfonts-100dpi \
+      xfonts-75dpi \
+      xfonts-cyrillic \
+      python-is-python3 \
+      imagemagick \
+      wget \
+      subversion\
+      vim && \
+      apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 
-############################
-# Install mamba
-ENV CONDA_DIR /opt/conda
+# Install files from freesurfer stage
+COPY --from=freesurfer /opt/freesurfer /opt/freesurfer
+
+# Simulate SetUpFreeSurfer.sh
+ENV OS="Linux" \
+    FS_OVERRIDE=0 \
+    FIX_VERTEX_AREA="" \
+    FSF_OUTPUT_FORMAT="nii.gz" \
+    FREESURFER_HOME="/opt/freesurfer"
+ENV SUBJECTS_DIR="$FREESURFER_HOME/subjects" \
+    FUNCTIONALS_DIR="$FREESURFER_HOME/sessions" \
+    MNI_DIR="$FREESURFER_HOME/mni" \
+    LOCAL_DIR="$FREESURFER_HOME/local" \
+    MINC_BIN_DIR="$FREESURFER_HOME/mni/bin" \
+    MINC_LIB_DIR="$FREESURFER_HOME/mni/lib" \
+    MNI_DATAPATH="$FREESURFER_HOME/mni/data"
+ENV PERL5LIB="$MINC_LIB_DIR/perl5/5.8.5" \
+    MNI_PERL5LIB="$MINC_LIB_DIR/perl5/5.8.5" \
+    PATH="$FREESURFER_HOME/bin:$FREESURFER_HOME/tktools:$MINC_BIN_DIR:$PATH"
+
+
+# Install files from micromamba stage
+COPY --from=micromamba /bin/micromamba /bin/micromamba
+COPY --from=micromamba /opt/conda/envs/scientific /opt/conda/envs/scientific
+
 ENV MAMBA_ROOT_PREFIX="/opt/conda"
-RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-$(uname)-$(uname -m).sh -O ~/mamba.sh && \
-      /bin/bash ~/mamba.sh -b -p /opt/conda
-
-# Put conda in path so we can use conda activate
-ENV PATH=$CONDA_DIR/bin:$PATH
-
-RUN mamba update -n base --all
-
-# install conda env
-COPY conda_config/scientific.yml .
-RUN mamba env create -f scientific.yml
-
-RUN apt update && apt install -y jq
-
-# Make directory for flywheel spec (v0)
-ENV FLYWHEEL /flywheel/v0
-RUN mkdir -p ${FLYWHEEL}
+RUN bash -c 'eval "$(micromamba shell hook --shell bash)"' && \
+    echo "micromamba activate scientific" >> $HOME/.bashrc
+ENV PATH="/opt/conda/envs/scientific/bin:$PATH" \
+    CPATH="/opt/conda/envs/scientific/include:$CPATH" \
+    LD_LIBRARY_PATH="/opt/conda/envs/scientific/lib:$LD_LIBRARY_PATH"
 
 # Copy and configure run script and metadata code
 COPY bin/run \
