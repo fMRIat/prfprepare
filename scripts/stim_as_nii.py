@@ -119,7 +119,7 @@ def stim_as_nii(
 
             if not path.isfile(oFname) or force:
                 if not path.isfile(stimP):
-                    exit(f"Did not find stim File: {stimP}")
+                    raise Warning(f"Did not find stim File: {stimP}")
 
                 # loat the mat files defining the stimulus
                 imagesFile = loadmat(stimP, simplify_cells=True)
@@ -270,7 +270,7 @@ def stim_as_nii(
 
                     if not path.isfile(oFname) or force:
                         if not path.isfile(stimP):
-                            exit(f"Did not find stim File: {stimP}")
+                            raise Warning(f"Did not find stim File: {stimP}")
 
                         # loat the mat files defining the stimulus
                         imagesFile = loadmat(stimP, simplify_cells=True)
