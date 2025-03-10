@@ -48,6 +48,7 @@ def link_stimuli(
             try:
                 stimName = apertures[[f"task-{task}_" in ap for ap in apertures]].item()
             except:
+                print(f"Did not find task-{task} in {apertures}.")
                 continue
 
             runs = layout.get(
