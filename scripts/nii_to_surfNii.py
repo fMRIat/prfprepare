@@ -470,48 +470,62 @@ def nii_to_surfNii(
                             data = data[allROImask.astype(bool), :]
 
                             # get rid of volumes where the stimulus showed only blank (prescanDuration)
+                            vistadisplog_path = path.join(
+                                bidsDir,
+                                "sourcedata",
+                                "vistadisplog",
+                            )
                             if forceParams:
-                                params_path = path.join(
-                                    bidsDir,
-                                    "sourcedata",
-                                    "vistadisplog",
+                                params_file = path.join(
+                                    vistadisplog_path,
                                     forceParamsFile,
                                 )
+
                             else:
                                 if "av" not in str(run):
                                     params_path = path.join(
-                                        bidsDir,
-                                        "sourcedata",
-                                        "vistadisplog",
+                                        vistadisplog_path,
                                         f"sub-{sub}",
                                         f"ses-{ses}",
                                         f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat",
                                     )
                                 else:
                                     params_path = path.join(
-                                        bidsDir,
-                                        "sourcedata",
-                                        "vistadisplog",
+                                        vistadisplog_path,
                                         f"sub-{sub}",
                                         f"ses-{ses}",
                                         f"sub-{sub}_ses-{ses}_task-{task}_run-01_params.mat",
                                     )
 
-                            if path.isfile(params_path):
-                                params = loadmat(params_path, simplify_cells=True)
-                            else:
-                                params_path = path.join(
+                            try:
+                                if path.isfile(params_path):
+                                    params = loadmat(params_path, simplify_cells=True)
+                                else:
+                                    params_path = path.join(
+                                        bidsDir,
+                                        "sourcedata",
+                                        "stimuli",
+                                        f"task-{task}_params.json",
+                                    )
+                                    note(params_path)
+                                    with open(params_path, "r") as fl:
+                                        params = json.load(fl)
+                                    note(
+                                        "we used the params file that comes with the precomputed stimulus!"
+                                    )
+                            except:
+                                params_path_json = path.join(
                                     bidsDir,
                                     "sourcedata",
                                     "stimuli",
                                     f"task-{task}_params.json",
                                 )
+                                print(f"Could not load {params_path}.")
                                 note(
-                                    "we used the params file that comes with the precomputed stimulus!"
+                                    f"You can define a task specific params json file in {params_path_json} with at leaset the field (tr), and additionall: (prescanDuration, startScan)."
                                 )
-                                note(params_path)
-                                with open(params_path, "r") as fl:
-                                    params = json.load(fl)
+                                note(f"Skipping {path.basename(newNiiP)}...")
+                                continue
 
                             tr = params["params"]["tr"]
 
