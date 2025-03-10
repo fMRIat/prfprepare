@@ -9,6 +9,7 @@ import sys
 def link_stimuli(
     sub,
     sess,
+    tasks,
     layout,
     bidsDir,
     outP,
@@ -39,7 +40,8 @@ def link_stimuli(
         forceParamsFile, forceTask = forceParams
 
     for sesI, ses in enumerate(sess):
-        tasks = layout.get(subject=sub, session=ses, return_type="id", target="task")
+        if not tasks:
+            tasks = layout.get(subject=sub, session=ses, return_type="id", target="task")
         if forceParams:
             tasks = [forceTask]
 

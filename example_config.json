@@ -1,19 +1,21 @@
 {
-    "subjects"                : "all",
-    "sessions"                : "all",
-    "etcorrection"            : false,
-    "force"                   : false,
-    "custom_output_name"      : "",
-    "fmriprep_legacy_layout"  : false,
-    "forceParams"             : "",
-    "use_numImages"           : false,
-    "verbose"                 : true,
+    "subjects": "all",
+    "sessions": "all",
+    "etcorrection": false,
+    "tasks": ["retRW","retFF","retCB"],
+    "force": false,
+    "custom_output_name": "",
+    "fmriprep_legacy_layout": false,
+    "forceParams": "",
+    "use_numImages": false,
+    "verbose": true,
     "config": {
-    	"analysisSpace"       : "fsnative",
-        "average_runs"        : true,
-        "output_only_average" : false,
-        "rois"                : "all",
-        "atlases"             : "all",
-        "fmriprep_analysis"   : "01"
- 	}
-}
+      "analysisSpace" : "fsnative",
+      "average_runs": true,
+      "output_only_average": false,
+      "rois": "all",
+      "atlases": "all",
+      "fmriprep_bids_layout": false,
+      "fmriprep_analysis": "beforeFebST05"
+    }
+  }

@@ -72,6 +72,7 @@ defaultConfig = {
     "subjects": "all",
     "sessions": "all",
     "etcorrection": False,
+    "tasks": "all",
     "force": False,
     "custom_output_name": "",
     "fmriprep_legacy_layout": False,
@@ -83,6 +84,7 @@ defaultConfig = {
         "output_only_average": False,
         "rois": "all",
         "atlases": "all",
+        "fmriprep_bids_layout": False,
         "fmriprep_analysis": "01",
     },
     "verbose": True,
@@ -120,9 +122,19 @@ note(json.dumps(config, indent=4))
 ################################################
 # everything not subject-specific
 # define input direcotry
-fmriprepAnalysis = config["config"]["fmriprep_analysis"]
 
-inDir = path.join(flywheelBase, "input", f"analysis-{fmriprepAnalysis}")
+# get the BIDS layout
+layout = bids.BIDSLayout(bidsDir, validate=False, derivatives=True)
+fmriprep_bids_layout = config["config"]["fmriprep_bids_layout"]
+fmriprepAnalysis = config["config"]["fmriprep_analysis"]
+if not fmriprep_bids_layout:
+    inDir = path.join(flywheelBase, "input", f"analysis-{fmriprepAnalysis}")
+else:
+    # check if it is bids valid
+    specific_laypout = layout.derivatives[f'derivatives/fmriprep-{fmriprepAnalysis}']
+    name=specific_laypout.root.split('/')[-1]
+    inDir = path.join(flywheelBase, "output", f"{name}")
+
 note(f"Loading data from {inDir}")
 
 # check the BIDS directory
@@ -178,6 +190,11 @@ else:
     customAnnots = []
 
 # get additional prams from config.json
+
+tasks = config2list(config["tasks"])
+if tasks == [""]:
+    tasks = False
+
 customName = config2list(config["custom_output_name"])[0]
 if customName == "":
     customName = False
@@ -234,8 +251,6 @@ while not found_outbids_dir and analysis_number < 100:
 
 note(f"Output directory: {outDir}")
 
-# get the BIDS layout
-layout = bids.BIDSLayout(bidsDir)
 
 # subject from config and check
 BIDSsubs = layout.get_subjects()
@@ -360,6 +375,7 @@ for sub in subs:
     link_stimuli(
         sub,
         sess,
+        tasks,
         layout,
         bidsDir,
         subOutDir,
@@ -386,3 +402,4 @@ if customName:
 os.chdir(path.expanduser("~"))
 # exit happily
 sys.exit(0)
+
