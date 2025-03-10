@@ -24,10 +24,11 @@
 # 1.3.7 define what is happening if no params.loadMatrix is defined
 # 1.4.0 update the python environment
 # 1.4.1 debugged the fullBrain option for doing analysis on all voxels/vertices
+# 1.5.0 update to ubuntu 24, fixed that is skips bold files without params, significantly reduced image size
 
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=1.4.3
+VERSION=1.5.0
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 
