@@ -476,7 +476,7 @@ def nii_to_surfNii(
                                 "vistadisplog",
                             )
                             if forceParams:
-                                params_file = path.join(
+                                params_path = path.join(
                                     vistadisplog_path,
                                     forceParamsFile,
                                 )
