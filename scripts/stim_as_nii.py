@@ -1,6 +1,6 @@
 # %%
 import numpy as np
-from os import path, makedirs
+from os import path, makedirs, sep
 import nibabel as nib
 from scipy.io import loadmat
 from scipy.ndimage import shift
@@ -83,7 +83,9 @@ def stim_as_nii(
         for logP in logPs:
             try:
                 stim = path.basename(
-                    loadmat(logP, simplify_cells=True)["params"]["loadMatrix"]
+                    loadmat(logP, simplify_cells=True)["params"]["loadMatrix"].replace(
+                        "\\", sep
+                    )
                 )
             except TypeError:
                 stimP = glob(path.join(bidsDir, "sourcedata", "stimuli", "*.mat"))
