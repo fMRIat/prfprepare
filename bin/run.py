@@ -266,34 +266,36 @@ for sub in subs:
     # define the subject output dir
     subOutDir = path.join(outDir, f"sub-{sub}")
 
-    ###############################################################################
-    # run neuropythy if not existing yet
-    if not path.isfile(path.join(fsDir, f"sub-{sub}", "mri", "benson14_varea.mgz")):
-        try:
-            print("Letting Neuropythy work...")
-            os.chdir(fsDir)
-            atlas.main(f"sub-{sub}", "-v", "-S")
-            os.chdir(path.expanduser("~"))
-        except BaseException as error:
-            print("An exception occurred: {}".format(error))
-            die("Neuropythy failed!")
+    # do the following steps only if analysisSpace is fsnative
+    if analysisSpace == "fsnative":
+        ###############################################################################
+        # run neuropythy if not existing yet
+        if not path.isfile(path.join(fsDir, f"sub-{sub}", "mri", "benson14_varea.mgz")):
+            try:
+                print("Letting Neuropythy work...")
+                os.chdir(fsDir)
+                atlas.main(f"sub-{sub}", "-v", "-S")
+                os.chdir(path.expanduser("~"))
+            except BaseException as error:
+                print("An exception occurred: {}".format(error))
+                die("Neuropythy failed!")
 
-    ###############################################################################
-    # Convert the annots to indivisual subject space using surf2surf
-    if customAnnots:
-        os.environ["SUBJECTS_DIR"] = fsDir
+        ###############################################################################
+        # Convert the annots to indivisual subject space using surf2surf
+        if customAnnots:
+            os.environ["SUBJECTS_DIR"] = fsDir
 
-        sublbl = path.join(fsDir, f"sub-{sub}", "customLabel")
-        if not path.isdir(sublbl):
-            os.mkdir(sublbl)
-        for annot in customAnnots:
-            if not path.isfile(path.join(sublbl, path.basename(annot))):
-                he = path.basename(annot).split(".")[0]
-                cmd = (
-                    f"mri_surf2surf --srcsubject fsaverage --trgsubject sub-{sub} --hemi {he} "
-                    f"--sval-annot {annot} --tval {path.join(sublbl, path.basename(annot))}"
-                )
-                sp.call(cmd, shell=True)
+            sublbl = path.join(fsDir, f"sub-{sub}", "customLabel")
+            if not path.isdir(sublbl):
+                os.mkdir(sublbl)
+            for annot in customAnnots:
+                if not path.isfile(path.join(sublbl, path.basename(annot))):
+                    he = path.basename(annot).split(".")[0]
+                    cmd = (
+                        f"mri_surf2surf --srcsubject fsaverage --trgsubject sub-{sub} --hemi {he} "
+                        f"--sval-annot {annot} --tval {path.join(sublbl, path.basename(annot))}"
+                    )
+                    sp.call(cmd, shell=True)
 
     ###############################################################################
     # do the actual work
