@@ -235,14 +235,21 @@ while not found_outbids_dir and analysis_number < 100:
 note(f"Output directory: {outDir}")
 
 # get the BIDS layout
-layout = bids.BIDSLayout(bidsDir)
+layout_indexer = bids.BIDSLayoutIndexer(
+    validate=False,
+    ignore=["20.*", "sourcedata", "fmriprep.*"],
+)
+layout = bids.BIDSLayout(
+    inDir,
+    indexer=layout_indexer,
+)
 
 # subject from config and check
 BIDSsubs = layout.get_subjects()
 subs = config2list(config["subjects"], BIDSsubs)
 
 
-################################################
+################################################f
 # loop over subjects
 for sub in subs:
     if sub not in BIDSsubs:
@@ -296,6 +303,21 @@ for sub in subs:
                         f"--sval-annot {annot} --tval {path.join(sublbl, path.basename(annot))}"
                     )
                     sp.call(cmd, shell=True)
+
+    if analysisSpace == "fsaverage":
+        ###############################################################################
+        # run neuropythy if not existing yet
+        if not path.isfile(
+            path.join(fsDir, "fsaverage", "surf", "rh.wang15_fplbl.mgz")
+        ):
+            try:
+                print("Letting Neuropythy work...")
+                os.chdir(fsDir)
+                atlas.main(f"fsaverage", "-v")
+                os.chdir(path.expanduser("~"))
+            except BaseException as error:
+                print("An exception occurred: {}".format(error))
+                die("Neuropythy failed!")
 
     ###############################################################################
     # do the actual work
