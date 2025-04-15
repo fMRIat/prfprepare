@@ -38,6 +38,9 @@ def stim_as_nii(
         forceParams = False
     if forceParams:
         forceParamsFile, forceTask = forceParams
+        if not forceParamsFile.endswith(".mat"):
+            forceParamsFile = forceParamsFile + ".mat"
+
         logPs = [path.join(bidsDir, "sourcedata", "vistadisplog", forceParamsFile)]
     else:
         logPs = np.array(
