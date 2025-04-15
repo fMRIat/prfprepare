@@ -37,6 +37,8 @@ def link_stimuli(
 
     if forceParams:
         forceParamsFile, forceTask = forceParams
+        if not forceParamsFile.endswith(".mat"):
+            forceParamsFile += ".mat"
 
     for sesI, ses in enumerate(sess):
         tasks = layout.get(subject=sub, session=ses, return_type="id", target="task")

@@ -59,6 +59,8 @@ def nii_to_surfNii(
 
     if forceParams:
         forceParamsFile, forceTask = forceParams
+        if not forceParamsFile.endswith(".mat"):
+            forceParamsFile = forceParamsFile + ".mat"
 
     for hemi in ["l", "r"]:
         # first get the total number of vertices
@@ -777,6 +779,7 @@ def load_atlas(
     elif analysisSpace == "volume":
         atlasF = "mri"
         atlasPre = f"{hemi}h.res_dil_{resDilRibbonNum}_"
+        sub_path = f"sub-{sub}"
 
     if atlas == "benson":
         areasP = path.join(fsDir, sub_path, atlasF, f"{atlasPre}benson14_varea.mgz")
