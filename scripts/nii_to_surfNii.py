@@ -178,7 +178,7 @@ def nii_to_surfNii(
                             with open(jsonP, "w") as fl:
                                 json.dump(jsonI, fl, indent=4)
 
-        if analysisSpace == "fsaverage":
+        elif analysisSpace == "fsaverage":
             nVertices = len(
                 nib.freesurfer.io.read_geometry(
                     path.join(fsDir, "fsaverage", "surf", f"{hemi.lower()}h.pial")
