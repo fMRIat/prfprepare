@@ -165,9 +165,8 @@ def _maybe_fix_stim_tr(stim, file_TR: float | None, LOG) -> None:
             return
         if float(stim.tr) != float(file_TR):
             LOG.warn(
-                f"Stimulus TR ({float(stim.tr):.4f}s) does not match file TR ({float(file_TR):.4f}s). Using file TR."
+                f"Stimulus TR ({float(stim.tr):.4f}s) does not match file TR ({float(file_TR):.4f}s)."
             )
-            stim.tr = float(file_TR)
     except Exception:
         # keep calm if stim.tr is read-only or non-float
         pass
