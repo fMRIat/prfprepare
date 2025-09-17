@@ -1,91 +1,80 @@
-# %%
-import nibabel as nib
-from os import path
+# link_stimuli.py
+
+import json
+from pathlib import Path
+
 import numpy as np
-from glob import glob
-import sys
+import pandas as pd
+from prfprepare_logging import get_logger
 
 
-def link_stimuli(
-    sub,
-    sess,
-    layout,
-    bidsDir,
-    outP,
-    etcorr,
-    forceParams,
-    average,
-    output_only_average,
-    force,
-    verbose,
-):
+def write_events(
+    ctx, stim, timepoints: int, stim_name: str, output_only_average: bool
+) -> Path:
     """
-    Here we link the _bold.nii.gz files to the corresponding stimulus files
-    by creating _events.tsv files which contain the stimulus information.
-    Those files are specific for sub,ses,task and runs;
-    but not specific for the area or atlas.
+    Write BIDS events.tsv file for a given run and task.
+
+    Creates a BIDS-compliant events file containing onset times, durations,
+    stimulus file names, and indices for each timepoint in the run.
+
+    Parameters
+    ----------
+    ctx : dict
+        Context dictionary containing:
+        - sub : str, subject identifier
+        - ses : str, session identifier
+        - task : str, task identifier
+        - run : str, run identifier
+        - func_out : Path, output directory for functional data
+        - force : bool, overwrite existing files (optional)
+        - log : logger instance (optional)
+        - verbose : bool for verbose logging (optional)
+    stim : object
+        Stimulus object with 'tr' attribute (repetition time in seconds).
+    timepoints : int
+        Number of timepoints in the run.
+    stim_name : str
+        Name of the stimulus file for the events.
+    output_only_average : bool
+        If True, skip creating events file.
+
+    Returns
+    -------
+    Path or None
+        Path to the created events.tsv file, or None if output_only_average=True.
     """
+    sub = ctx.get("sub")
+    ses = ctx.get("ses")
+    task = ctx.get("task")
+    run = ctx.get("run")
+    out_dir = ctx.get("func_out")
+    force = ctx.get("force", False)
 
-    def die(*args):
-        print(*args)
-        sys.exit(1)
+    LOG = ctx.get("log") or get_logger(
+        __file__, verbose=bool(ctx.get("verbose", False))
+    )
 
-    def note(*args):
-        if verbose:
-            print(*args)
-        return None
+    if output_only_average:
+        LOG.debug("Skipping events.tsv creation due to output_only_average=True")
+        return
 
-    if forceParams:
-        forceParamsFile, forceTask = forceParams
-        if not forceParamsFile.endswith(".mat"):
-            forceParamsFile += ".mat"
+    events_path = out_dir / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv"
 
-    for sesI, ses in enumerate(sess):
-        tasks = layout.get(subject=sub, session=ses, return_type="id", target="task")
-        if forceParams:
-            tasks = [forceTask]
+    if events_path.exists() and not force:
+        LOG.debug(f"Events already exist, skipping: {events_path}")
+        return events_path
 
-        for task in tasks:
-            apertures = np.array(glob(path.join(outP, "stimuli", "task-*.nii.gz")))
-            try:
-                stimName = apertures[[f"task-{task}_" in ap for ap in apertures]].item()
-            except:
-                print(f"Did not find task-{task} in {apertures}.")
-                continue
+    tr = float(getattr(stim, "tr"))
 
-            runs = layout.get(
-                subject=sub, session=ses, task=task, return_type="id", target="run"
-            )
-            # adapt for averaged runs
-            if average and len(runs) > 1:
-                if output_only_average:
-                    runs = ["".join(map(str, runs)) + "avg"]
-                else:
-                    runs.append("".join(map(str, runs)) + "avg")
+    with open(events_path, "w") as f:
+        f.write("onset\tduration\tstim_file\tstim_file_index\n")
+        for i in range(timepoints):
+            f.write(f"{i * tr:.3f}\t{tr:.3f}\t{stim_name}\t{i + 1}\n")
+    LOG.debug(f"Wrote events.tsv: {events_path} (T={timepoints}, TR={tr})")
+    return events_path
 
-            for run in runs:
-                # create events.tsv
-                newTSV = path.join(
-                    outP,
-                    f"ses-{ses}",
-                    "func",
-                    f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_events.tsv",
-                )
 
-                if not path.isfile(newTSV) or force:
-                    with open(newTSV, "w") as file:
-                        nii = nib.load(stimName)
-                        TR = nii.header["pixdim"][4]
-                        nT = nii.shape[3]
-
-                        # fill the events file
-                        file.writelines("onset\tduration\tstim_file\tstim_file_index\n")
-
-                        for i in range(nT):
-                            file.write(
-                                f'{i*TR:.3f}\t{TR:.3f}\t{stimName.split("/")[-1]}\t{i+1}\n'
-                            )
-
+""" old stuff, eyetracker correction currently not implemented
                 # create events.tsv for ET corr
                 if etcorr:
                     if average and len(runs) > 1:
@@ -128,3 +117,4 @@ def link_stimuli(
 
                     else:
                         print("No eyetracker analysis-XX folder found!")
+"""

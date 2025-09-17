@@ -1,0 +1,3 @@
+[submodule "scripts/roipack"]
+	path = scripts/roipack
+	url = https://github.com/dlinhardt/roipack

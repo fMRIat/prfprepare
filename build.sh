@@ -3,6 +3,6 @@
 
 ME=davidlinhardt
 GEAR=prfprepare
-VERSION=6.2
+VERSION=7.0
 docker build --platform linux/x86_64 --tag $ME/$GEAR:$VERSION .
 

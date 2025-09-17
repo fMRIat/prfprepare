@@ -1,0 +1,20 @@
+{
+    "subjects": "all",
+    "sessions": "all",
+    "tasks": "all",
+    "etcorrection": false,
+    "force": false,
+    "custom_output_name": "",
+    "fmriprep_legacy_layout": false,
+    "forceParams": "",
+    "use_numImages": false,
+    "config": {
+        "analysisSpace": "fsnative",
+        "average_runs": false,
+        "output_only_average": false,
+        "rois": "all",
+        "atlases": "all",
+        "fmriprep_analysis": "01"
+    },
+    "verbose": true
+}
