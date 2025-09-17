@@ -7,3 +7,6 @@ docker.tar
 *.sif
 .vscode/launch.json
 config_files/scientific_free.yml
+**/._*
+.lprof
+**/__pycache__

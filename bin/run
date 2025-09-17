@@ -1,94 +1,151 @@
-#! /bin/bash
+#!/usr/bin/env bash
 
-# The run script for the prfpreare docker.
-################################################################################
-set +o verbose   # Command echo off
+###############################################################################
+# prfprepare container entrypoint
+# Responsibilities:
+#   1. Parse args / show help
+#   2. Launch orchestrator Python script
+#   3. Fix output permissions (without making things world-writable if avoidable)
+#   4. Provide clear, timestamped logging + robust error handling
+###############################################################################
 
-# If run in debug mode, just exec bash:
-if [ "$1" = "DEBUG" ]
-    then exec /bin/bash
-elif [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "-help" ] || [ "$1" = "help" ]
-    then cat /opt/help.txt
+# Safety settings (pipefail + nounset). Allow unbound in case of optional vars? No.
+set -Euo pipefail
+IFS=$'\n\t'
+
+###############################################################################
+# Globals
+GEAR="prfprepare"
+REPO="davidlinhardt"
+CONTAINER="[${REPO}/${GEAR}]"
+DATA_DIR="/base/data"
+SCRIPTS_DIR="/base/scripts"
+DEFAULT_CONFIG="${SCRIPTS_DIR}/default_config.json"
+OUTPUT_DIR="${DATA_DIR}/derivatives/prfprepare"
+
+VERBOSE=0
+FORCE=0
+CONFIG_FILE=""   # Will default to DEFAULT_CONFIG if not provided
+
+export PYTHONUNBUFFERED=1
+
+###############################################################################
+# Logging helpers
+log() { printf '%s %s %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$CONTAINER" "$*"; }
+debug() { [ "$VERBOSE" -eq 1 ] && log "[DEBUG] $*"; }
+warn() { printf '%s %s <WARN> %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$CONTAINER" "$*" >&2; }
+err()  { printf '%s %s <ERROR> %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$CONTAINER" "$*" >&2; }
+die()  { err "$*"; exit 1; }
+
+usage() {
+        cat <<EOF
+${CONTAINER} prfprepare entrypoint
+
+Usage: run [OPTIONS] [config.json]
+
+Options:
+    -h, --help              Show this help and exit
+    -v, --verbose           Verbose / debug logging
+    -f, --force             Force overwrite behaviors (exported to Python)
+        --config PATH       Explicit config file (overrides default & positional)
+    DEBUG                   Drop into interactive shell instead of running
+
+Arguments:
+    config.json             (legacy) Config path if provided as sole positional
+                             (ignored if --config used)
+EOF
+}
+
+###############################################################################
+# Early special modes
+if [[ "${1:-}" == "DEBUG" ]]; then
+    exec /bin/bash
+fi
+
+if [[ "${1:-}" =~ ^(-h|--help|-help|help)$ ]]; then
+    if [[ -f /opt/help.txt ]]; then
+        cat /opt/help.txt
+        echo
+    fi
+    usage
     exit 0
 fi
 
-
-# Some variables and functions #################################################
-
-GEAR=prfprepare
-REPO=dlinhardt
-CONTAINER="[${REPO}/$GEAR]"
-
-echo -e "$CONTAINER  Initiated"
-set -e
-
-VERBOSE=0
-FORCE=0 # 1 for force overwrite
-
-# Built to flywheel-v0 spec.
-FLYWHEEL_BASE=/flywheel/v0
-OUTPUT_DIR="$FLYWHEEL_BASE"/output
-INPUT_DIR="$FLYWHEEL_BASE"/input
-CONFIG_FILE=$FLYWHEEL_BASE/config.json
-
-# How we print to stdout:
-function note {
-    [ "$VERBOSE" = 1 ] && echo "$CONTAINER" "   " "$*"
-}
-function err {
-    echo "<ERROR>" "$CONTAINER" "   " "$*" >2
-}
-function die {
-    echo "<ERROR>" "$CONTAINER" "   " "$*" >2
-    exit 1
-}
-
-# Process Arguments ############################################################
-while [ "$#" -gt 0 ]
-do   case "$1"
-     in "--help"|"-h")
-            cat /opt/help.txt
-            exit 0
-            ;;
-        "--force"|"-f")
-            FORCE=1
-            ;;
-        "--verbose"|"-v")
-            VERBOSE=1
-            ;;
+###############################################################################
+# Argument parsing (simple manual loop to preserve original interface)
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -v|--verbose) VERBOSE=1 ;;
+        -f|--force) FORCE=1 ;;
+        --config)
+                shift || die "--config requires a path"
+                CONFIG_FILE="$1" ;;
+        --config=*)
+                CONFIG_FILE="${1#*=}" ;;
+        DEBUG) die "DEBUG must be first argument if used" ;;
+        -*) die "Unknown option: $1" ;;
         *)
-            if [ -z "$CONFIG_FILE" ]
-            then CONFIG_FILE="$1"
-            else die "Too many arguments given to docker"
-            fi
-            ;;
-     esac
-     shift
+                # legacy positional config (only if not already set by --config)
+                if [[ -z "$CONFIG_FILE" || "$CONFIG_FILE" == "$DEFAULT_CONFIG" ]]; then
+                    CONFIG_FILE="$1"
+                else
+                    warn "Ignoring extra positional argument '$1'"
+                fi ;;
+    esac
+    shift
 done
 
-# Main Script ##################################################################
-# If no input is given we exit
-[ -r "$CONFIG_FILE" ] || {
-    echo "No config file found. Please provide one!"
-    exit 0
+CONFIG_FILE="${CONFIG_FILE:-$DEFAULT_CONFIG}"
+
+###############################################################################
+# Trap / cleanup
+on_exit() {
+    local ec=$?
+    if [[ $ec -eq 0 ]]; then
+        log "Completed (exit=$ec)"
+    else
+        err "Aborted (exit=$ec)"
+    fi
 }
+trap on_exit EXIT
+trap 'die "Interrupted"' INT TERM
 
-# otherwise, we run the following python code to parse the json and run the
-# /solve.sh script!
-# mkdir -p /running
-export FORCE
-export VERBOSE
-export FIELDS
+log "Initiated"
+debug "FORCE=$FORCE VERBOSE=$VERBOSE CONFIG_FILE=$CONFIG_FILE"
 
-python ${FLYWHEEL_BASE}/run.py "$CONFIG_FILE" || die "Python startup script failed!"
-# At this point, the files should have been exported to the appropriate directory,
-# which should be linked to /running/out
-[ -d $OUTPUT_DIR ] || die "Python startup script failed to make output link!"
+[[ -r "$CONFIG_FILE" ]] || die "Config file not readable: $CONFIG_FILE"
 
-# Handle permissions of the outputs
-cd /flywheel/v0/output
-find "$OUTPUT_DIR/prfprepare" -type d -exec chmod 777 '{}' ';'
-find "$OUTPUT_DIR/prfprepare" -type f -exec chmod 666 '{}' ';'
+export FORCE VERBOSE
 
-# we don't have any post-processing to do at this point (but later we might)
+###############################################################################
+# Run orchestrator (add flags only when set)
+PY_ARGS=(--config "$CONFIG_FILE")
+(( FORCE )) && PY_ARGS+=(--force)
+(( VERBOSE )) && PY_ARGS+=(--verbose)
+
+echo "##############################################################################"
+echo "                              Running prfprepare                              "
+echo "##############################################################################"
+echo; echo
+python ${SCRIPTS_DIR}/run.py "${PY_ARGS[@]}" || die "Python orchestrator failed"
+
+[[ -d "$OUTPUT_DIR" ]] || die "Output directory not created: $OUTPUT_DIR"
+
+#####################################################
+echo "##############################################################################"##########################
+echo; echo
+# Permissions
+if [[ -d "$OUTPUT_DIR" ]]; then
+    debug "Fixing permissions under $OUTPUT_DIR"
+    # Grant group write and read/exec to all; avoid 777 unless required.
+    # If world-writable is truly desired uncomment the alternative lines.
+    find "$OUTPUT_DIR" -type d -exec chmod 775 {} +
+    find "$OUTPUT_DIR" -type f -exec chmod 664 {} +
+    # Alternative (less safe): chmod -R 777/666
+else
+    warn "Expected output subdir missing: $OUTPUT_DIR"
+fi
+
+log "Finished"
 exit 0
