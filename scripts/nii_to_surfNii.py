@@ -43,10 +43,14 @@ def _load_bold_data(in_path):
             data = img.agg_data()
     else:
         img = in_path
-        data = img.get_fdata()
+        if hasattr(img, "agg_data"):
+            data = img.agg_data()
+        elif hasattr(img, "get_fdata"):
+            data = img.get_fdata(dtype=np.float32)
+        else:
+            raise ValueError("Input is nibabel image but type not recognized!")
 
     return data, img
-
 
 def apply_masks_to_run(
     ctx,

@@ -259,15 +259,13 @@ def _bold_path_for(
         raise ValueError(f"Unsupported analysis_space: {analysis_space}")
 
 
-def _average_runs_bold(bold_paths, out_path, LOG) -> Path:
+def _average_runs_bold(bold_paths, LOG) -> Path:
     """Crop to shortest T and compute voxel-wise mean across multiple BOLD runs.
 
     Parameters
     ----------
     bold_paths : list[Path]
         List of paths to BOLD files to average.
-    out_path : Path
-        Output path for the averaged BOLD file.
     LOG : logger
         Logger instance for info messages.
 
@@ -325,9 +323,8 @@ def _average_runs_bold(bold_paths, out_path, LOG) -> Path:
 
         mean = np.mean(np.stack(datas, axis=0), axis=0)
         avg_img = nib.Nifti1Image(mean, imgs[0].affine, imgs[0].header)
-        nib.save(avg_img, str(out_path))
-        LOG.info(f"Averaged {len(bold_paths)} runs → {out_path} (T={min_T})")
-        return out_path
+        LOG.info(f"Averaged {len(bold_paths)} runs (T={min_T})")
+        return avg_img
 
     elif kind == "gifti":
         # Validate vertex count and crop to shortest T (number of darrays)
@@ -378,9 +375,8 @@ def _average_runs_bold(bold_paths, out_path, LOG) -> Path:
                 pass
             gi.add_gifti_data_array(da)
 
-        nib.save(gi, str(out_path))
-        LOG.info(f"Averaged {len(bold_paths)} runs → {out_path} (T={min_T})")
-        return out_path
+        LOG.info(f"Averaged {len(bold_paths)} runs (T={min_T})")
+        return gi
 
     else:
         raise ValueError(f"Unsupported analysis file type for averaging: {kind}")
@@ -632,6 +628,23 @@ def process_subject_session(config: dict, in_root: Path):
     if not fs_dir.exists():
         raise FileNotFoundError(f"FreeSurfer dir not found: {fs_dir}")
 
+    # Core options
+    analysis_space = cconfig.get("analysisSpace", "fsnative")
+    average_runs = bool(cconfig.get("average_runs", False))
+    output_only_average = bool(config.get("output_only_average", False))
+    use_numImages = bool(config.get("use_numImages", False))
+    ctx["etcorr"] = bool(config.get("etcorrection", False))
+    ctx["force"] = bool(config.get("force", False))
+
+    # check for the analysis_spaces
+    if analysis_space not in ("fsnative", "fsaverage", "volume"):
+        if analysis_space == "surface":
+            analysis_space = "fsnative"
+        else:
+            raise ValueError(
+                f"analysisSpace {analysis_space} not recognized, should be in [fsnative, fsaverage or volume]!"
+            )
+
     out_analysis_name = _get_out_analysis_name(cconfig, derivatives_dir, LOG)
 
     out_base = derivatives_dir / "prfprepare" / out_analysis_name
@@ -674,23 +687,6 @@ def process_subject_session(config: dict, in_root: Path):
             atlases += [a.name for a in custom_annots]
     else:
         custom_annots = []
-
-    # Core options
-    analysis_space = cconfig.get("analysisSpace", "fsnative")
-    average_runs = bool(cconfig.get("average_runs", False))
-    output_only_average = bool(config.get("output_only_average", False))
-    use_numImages = bool(config.get("use_numImages", False))
-    ctx["etcorr"] = bool(config.get("etcorrection", False))
-    ctx["force"] = bool(config.get("force", False))
-
-    # check for the analysis_spaces
-    if analysis_space not in ("fsnative", "fsaverage", "volume"):
-        if analysis_space == "surface":
-            analysis_space = "fsnative"
-        else:
-            raise ValueError(
-                f"analysisSpace {analysis_space} not recognized, should be in [fsnative, fsaverage or volume]!"
-            )
 
     # get the BIDS layout
     LOG.debug("Discovering BIDS layout (this may take a moment)…")
@@ -944,20 +940,11 @@ def process_subject_session(config: dict, in_root: Path):
                         )
 
                         try:
-                            avg_bold_path = _bold_path_for(
-                                bold_base_dir,
-                                analysis_space,
-                                sub,
-                                ses,
-                                task,
-                                "".join(runs) + "avg",
-                                hemi,
-                            )
 
                             LOG.debug("Computing average BOLD across runs…")
                             t0 = time.perf_counter()
                             ctx["bold_path"] = _average_runs_bold(
-                                all_run_paths, avg_bold_path, LOG
+                                all_run_paths, LOG
                             )
                             LOG.debug(
                                 f"Average computed in {time.perf_counter()-t0:.2f}s"
