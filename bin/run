@@ -133,15 +133,15 @@ python ${SCRIPTS_DIR}/run.py "${PY_ARGS[@]}" || die "Python orchestrator failed"
 [[ -d "$OUTPUT_DIR" ]] || die "Output directory not created: $OUTPUT_DIR"
 
 #####################################################
-echo "##############################################################################"##########################
+echo "##############################################################################"
 echo; echo
 # Permissions
 if [[ -d "$OUTPUT_DIR" ]]; then
     debug "Fixing permissions under $OUTPUT_DIR"
     # Grant group write and read/exec to all; avoid 777 unless required.
     # If world-writable is truly desired uncomment the alternative lines.
-    find "$OUTPUT_DIR" -type d -exec chmod 775 {} +
-    find "$OUTPUT_DIR" -type f -exec chmod 664 {} +
+    find "$OUTPUT_DIR" -type d -exec chmod 775 {} + 2>/dev/null || true
+    find "$OUTPUT_DIR" -type f -exec chmod 664 {} + 2>/dev/null || true
     # Alternative (less safe): chmod -R 777/666
 else
     warn "Expected output subdir missing: $OUTPUT_DIR"
