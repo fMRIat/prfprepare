@@ -287,7 +287,6 @@ def _write_union_membership(f: h5py.File, rois: dict, base_group: str | None = N
                 h,
                 data=roi_masked_indices,
                 compression="gzip",
-                compression_opts=4,
                 shuffle=True,
                 fletcher32=True,
             )
@@ -360,7 +359,6 @@ def _save_rois_h5(
                 hemi,
                 data=idx,
                 compression="gzip",
-                compression_opts=4,
                 shuffle=True,
                 fletcher32=True,
             )
@@ -391,10 +389,26 @@ def _save_rois_h5(
             for name in ("atlas", "roi", "hemi", "path"):
                 if name in g_index:
                     del g_index[name]
-            g_index.create_dataset("atlas", data=[r[0] for r in rows], dtype=dt)
-            g_index.create_dataset("roi", data=[r[1] for r in rows], dtype=dt)
-            g_index.create_dataset("hemi", data=[r[2] for r in rows], dtype=dt)
-            g_index.create_dataset("path", data=[r[3] for r in rows], dtype=dt)
+            g_index.create_dataset(
+                "atlas",
+                data=[r[0] for r in rows],
+                dtype=dt,
+            )
+            g_index.create_dataset(
+                "roi",
+                data=[r[1] for r in rows],
+                dtype=dt,
+            )
+            g_index.create_dataset(
+                "hemi",
+                data=[r[2] for r in rows],
+                dtype=dt,
+            )
+            g_index.create_dataset(
+                "path",
+                data=[r[3] for r in rows],
+                dtype=dt,
+            )
 
         # build info for masked space membership
         _write_union_membership(f, rois, base_group=base_group)
@@ -965,10 +979,18 @@ def prepare_roi_pack(
                     if name in gg:
                         del gg[name]
                 gg.create_dataset(
-                    "grid_shape", data=np.asarray(bimg.shape[:3], np.int32)
+                    "grid_shape",
+                    data=np.asarray(bimg.shape[:3], np.int32),
+                    compression="gzip",
+                    shuffle=True,
+                    fletcher32=True,
                 )
                 gg.create_dataset(
-                    "grid_affine", data=np.asarray(bimg.affine, np.float64)
+                    "grid_affine",
+                    data=np.asarray(bimg.affine, np.float64),
+                    compression="gzip",
+                    shuffle=True,
+                    fletcher32=True,
                 )
             _save_rois_h5(
                 h5_path,

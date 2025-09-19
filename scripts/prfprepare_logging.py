@@ -112,7 +112,7 @@ class _Logger:
         stream : file-like
             Output stream (stdout or stderr).
         """
-        prefix = f"[prfprepare/{_basename(self.file)}] "
+        prefix = f"[prfprepare] "
         try:
             formatted = msg % args if args else msg
         except Exception:
