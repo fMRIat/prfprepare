@@ -10,3 +10,6 @@ config_files/scientific_free.yml
 **/._*
 .lprof
 **/__pycache__
+**/*.pyc
+**/*.pyo
+**/*cpython*
