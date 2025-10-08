@@ -146,7 +146,7 @@ def _get_bold_T_and_TR(p: Path, LOG=None) -> tuple[int | None, float | None]:
         return None, None
 
 
-def _maybe_fix_stim_tr(stim, file_TR: float | None, LOG) -> None:
+def _log_stim_file_tr_mismatch(stim, file_TR: float | None, LOG) -> None:
     """If file_TR is present and differs from stim.tr, warn and update stim.tr.
 
     Parameters
@@ -167,6 +167,7 @@ def _maybe_fix_stim_tr(stim, file_TR: float | None, LOG) -> None:
             LOG.warn(
                 f"Stimulus TR ({float(stim.tr):.4f}s) does not match file TR ({float(file_TR):.4f}s)."
             )
+            LOG.warn(f"Using stimulus TR ({float(stim.tr):.4f}s)!")
     except Exception:
         # keep calm if stim.tr is read-only or non-float
         pass
@@ -815,10 +816,10 @@ def process_subject_session(config: dict, in_root: Path):
                         sample_hemi,
                     )
 
-                # If sample exists, compare stim TR vs file TR; if mismatch, use file TR
+                # If sample exists, compare stim TR vs file TR
                 if sample_bold_path and sample_bold_path.exists():
                     _, file_TR = _get_bold_T_and_TR(sample_bold_path, LOG=LOG)
-                    _maybe_fix_stim_tr(stim, file_TR, LOG)
+                    _log_stim_file_tr_mismatch(stim, file_TR, LOG)
                 else:
                     LOG.debug(
                         "Sample BOLD file not found; will validate per-run instead."
@@ -871,7 +872,7 @@ def process_subject_session(config: dict, in_root: Path):
                             file_T, file_TR = _get_bold_T_and_TR(
                                 ctx["bold_path"], LOG=LOG
                             )
-                            _maybe_fix_stim_tr(stim, file_TR, LOG)
+                            _log_stim_file_tr_mismatch(stim, file_TR, LOG)
                             _log_timepoints_mismatch(
                                 file_T, timepoints, str(ctx["bold_path"]), LOG
                             )
@@ -943,9 +944,7 @@ def process_subject_session(config: dict, in_root: Path):
 
                             LOG.debug("Computing average BOLD across runs…")
                             t0 = time.perf_counter()
-                            ctx["bold_path"] = _average_runs_bold(
-                                all_run_paths, LOG
-                            )
+                            ctx["bold_path"] = _average_runs_bold(all_run_paths, LOG)
                             LOG.debug(
                                 f"Average computed in {time.perf_counter()-t0:.2f}s"
                             )

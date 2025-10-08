@@ -123,10 +123,9 @@ ENV MAMBA_ROOT_PREFIX="/opt/conda"
 RUN bash -c 'eval "$(micromamba shell hook --shell bash)"' && \
     echo "micromamba activate scientific" >> $HOME/.bashrc
 # Prepend scientific env paths while preserving prior values only if they exist.
-# Using ${VAR:+:${VAR}} avoids referencing undefined variables (quieting linters).
-ENV PATH="/opt/conda/envs/scientific/bin:${PATH}" \
-    CPATH="/opt/conda/envs/scientific/include${CPATH:+:${CPATH}}" \
-    LD_LIBRARY_PATH="/opt/conda/envs/scientific/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+ENV PATH="/opt/conda/envs/scientific/bin:$PATH" \
+    LD_LIBRARY_PATH="/opt/foo/lib:${LD_LIBRARY_PATH:-}" \
+    CPATH="/opt/foo/include:${CPATH:-}"
 
 # Copy and configure run script and metadata code
 COPY bin/run \
