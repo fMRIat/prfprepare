@@ -864,9 +864,10 @@ def process_subject_session(config: dict, in_root: Path):
 
                             # check if bold_path exists
                             if not ctx["bold_path"].exists():
-                                raise FileNotFoundError(
-                                    f"BOLD file not found: {ctx['bold_path']}"
+                                LOG.error(
+                                    f"BOLD file not found: {ctx['bold_path']}, skipping."
                                 )
+                                continue
 
                             # Per-run check: compare aperture T vs file T
                             file_T, file_TR = _get_bold_T_and_TR(
