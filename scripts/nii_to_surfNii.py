@@ -57,7 +57,6 @@ def apply_masks_to_run(
     stim,
     roi_pack,
     output_only_average: bool = False,
-    force: bool = False,
 ) -> dict:
     """
     Apply ROI masks from roi_pack to a 4D BOLD NIfTI and save masked output.
@@ -90,6 +89,7 @@ def apply_masks_to_run(
         Summary dictionary with processing results, or None if output_only_average=True.
         Contains information about applied masks and output files.
     """
+    force = ctx.get("force")
     sub = ctx.get("sub")
     ses = ctx.get("ses")
     task = ctx.get("task")
@@ -97,7 +97,7 @@ def apply_masks_to_run(
     hemi = ctx.get("hemi")
     in_path = ctx["bold_path"]
     out_dir = ctx["func_out"]
-    tr = float(stim.tr)
+    tr = float(getattr(stim, "tr"))
 
     LOG = ctx.get("log") or get_logger(
         __file__, verbose=bool(ctx.get("verbose", False))
@@ -128,7 +128,7 @@ def apply_masks_to_run(
         masked = flat[u].astype(np.float32)
 
         newNii = nib.Nifti2Image(masked[:, None, None, :], affine=np.eye(4))
-        newNii.header["pixdim"] = [1.0, 1.0, 1.0, tr, 1.0, 1.0, 1.0, 1.0]
+        newNii.header["pixdim"] = [1.0, 1.0, 1.0, 1.0, tr, 1.0, 1.0, 1.0]
         newNii.header["qform_code"] = 0
         newNii.header["sform_code"] = 0
         newNii.header["qoffset_x"] = 1.0
@@ -137,4 +137,4 @@ def apply_masks_to_run(
         newNii.header["cal_max"] = 1.0
         newNii.header["xyzt_units"] = 10
         nib.save(newNii, str(nii_path))
-        LOG.info(f"Wrote masked BOLD: {nii_path} (T={data.shape[-1]})")
+        LOG.info(f"Wrote masked BOLD: {nii_path} (T={data.shape[-1]}, tr={tr})")
