@@ -5,6 +5,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import nibabel as nib
 
 # --------------------------- public classes ----------------------------
 
@@ -470,6 +471,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                 frames=frames,
                 aperture_nii=None,
                 meta={"mat": str(mat_path)},
+                seqtiming=None,
             )
         else:
             raise ValueError(
@@ -531,6 +533,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                     frames=frames,
                     aperture_nii=None,
                     meta={"mat": str(mp)},
+                    seqtiming=None,
                 )
 
     # ---- 4) precomputed apertures (+ optional task JSON) ----
@@ -541,7 +544,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
         if jp.is_file():
             timing = _read_params_from_json(jp)
         if timing is None:
-            timing = {"tr": float("nan"), "prescan": 0.0, "start_scan": 0.0}
+            timing = {"tr": nib.load(ap).header['pixdim'][4], "prescan": 0.0, "start_scan": 0.0}
         nT = _nifti_timepoints(ap)
         return StimSpec(
             kind="precomp_aperture",
@@ -556,6 +559,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                 "aperture": str(ap),
                 "params_json": str(jp) if jp.is_file() else None,
             },
+            seqtiming=None,
         )
 
     # nothing usable

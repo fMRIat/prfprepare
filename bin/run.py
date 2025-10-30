@@ -163,7 +163,7 @@ def _log_stim_file_tr_mismatch(stim, file_TR: float | None, LOG) -> None:
             return
         if getattr(stim, "tr", None) is None or np.isnan(stim.tr):
             return
-        if float(stim.tr) != float(file_TR):
+        if not np.isclose(float(stim.tr), float(file_TR), rtol=1e-5, atol=1e-8):
             LOG.warn(
                 f"Stimulus TR ({float(stim.tr):.4f}s) does not match file TR ({float(file_TR):.4f}s)."
             )
