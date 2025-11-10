@@ -634,6 +634,7 @@ def process_subject_session(config: dict, in_root: Path):
     average_runs = bool(cconfig.get("average_runs", False))
     output_only_average = bool(config.get("output_only_average", False))
     use_numImages = bool(config.get("use_numImages", False))
+    output_all_frames = bool(cconfig.get("output_all_frames", False))
     ctx["etcorr"] = bool(config.get("etcorrection", False))
     ctx["force"] = bool(config.get("force", False))
 
@@ -829,7 +830,7 @@ def process_subject_session(config: dict, in_root: Path):
                 LOG.debug("Generating aperture NIfTI…")
                 t0 = time.perf_counter()
                 aperture_name, timepoints = generate_aperture_nii(
-                    ctx, stim, use_numImages
+                    ctx, stim, use_numImages, output_all_frames
                 )
                 LOG.debug(
                     f"Aperture ready: {aperture_name} (T={timepoints}) in {time.perf_counter()-t0:.2f}s"
