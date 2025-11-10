@@ -115,20 +115,27 @@ def generate_aperture_nii(
         tr = getattr(stim, "tr", None)
         prescan = getattr(stim, "prescan", 0.0)
 
+        # get the seqtiming and compute shift
+        seqTiming = getattr(stim, "seqtiming", None)
+        shift = tr / 2 / seqTiming if seqTiming is not None else 0
+
         # Resolve time dimension limit
         if use_numImages:
             numImages = getattr(stim, "numImages", None)
-            if numImages is not None:
-                n_with_prescan = int(round(numImages + prescan / tr))
-            else:
+            if numImages is None:
                 raise ValueError("stim.numImages is not set but use_numImages=True")
-            idx = np.linspace(0, len(seq) - 1, n_with_prescan, dtype=int)
-
         else:
             LOG.debug("Using seqtiming from stim")
-            seqTiming = getattr(stim, "seqtiming", None)
             numImages = len(seq) * seqTiming / tr
-            idx = np.linspace(0, len(seq) - 1, int(numImages), dtype=int)
+
+        # add prescan frames
+        n_with_prescan = int(round(numImages + prescan / tr))
+
+        # Compute frame indices to pick
+        idx = (
+            np.linspace(0, len(seq) - 1, n_with_prescan, dtype=int, endpoint=False)
+            + int(shift)
+        )
 
         if idx.size == 0:
             raise ValueError(
