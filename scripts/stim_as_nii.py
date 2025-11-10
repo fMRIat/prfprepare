@@ -32,6 +32,7 @@ def generate_aperture_nii(
     ctx: dict,
     stim,
     use_numImages: bool = False,
+    output_all_frames: bool = False,
 ) -> tuple[str, int]:
     """
     Generate a 4D NIfTI file of binary stimulus apertures from stimulus data.
@@ -61,6 +62,9 @@ def generate_aperture_nii(
     use_numImages : bool, optional
         If True, use stim.numImages to determine frame count.
         Default is False.
+    output_all_frames : bool, optional
+        If True, also write a full-frame NIfTI with all stimulus frames
+        at their native timing (TR = 1/seqtiming). Default is False.
 
     Returns
     -------
@@ -132,31 +136,68 @@ def generate_aperture_nii(
         n_with_prescan = int(round(numImages + prescan / tr))
 
         # Compute frame indices to pick
-        idx = (
-            np.linspace(0, len(seq) - 1, n_with_prescan, dtype=int, endpoint=False)
-            + int(shift)
-        )
+        idx = np.linspace(
+            0, len(seq) - 1, n_with_prescan, dtype=int, endpoint=False
+        ) + int(shift)
 
         if idx.size == 0:
             raise ValueError(
                 "Computed zero frames to export (idx.size == 0). Check params/seqtiming/tr."
             )
 
-        LOG.debug("Constructing apertures from frames...")
-        # Gather frames: picked_images shape (H, W, T_with_prescan)
-        picked_images = images[:, :, seq[idx]]
+        # Decide what to output based on output_all_frames flag
+        if output_all_frames:
+            # Output all frames at native timing instead of TR-sampled
+            frame_tr = getattr(stim, "seqtiming", None)
+            if frame_tr is not None and frame_tr > 0:
+                LOG.debug("Output all frames mode: using native frame timing...")
+                picked_images = images[:, :, seq]
 
-        # Remove prescan-duration from the beginning
-        if prescan > 0:
-            n_drop = int(round(prescan / tr))
-            if n_drop >= picked_images.shape[-1]:
-                raise ValueError(
-                    f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={picked_images.shape[-1]}."
+                # Drop prescan frames if applicable
+                if prescan > 0:
+                    n_drop = int(round(prescan / frame_tr))
+                    if n_drop >= picked_images.shape[-1]:
+                        raise ValueError(
+                            f"Prescan removal would drop all frames: prescan={prescan}, seqtiming={frame_tr}, T={picked_images.shape[-1]}."
+                        )
+                    picked_images = picked_images[:, :, n_drop:]
+                    LOG.debug(
+                        f"Full-frames mode: Prescan={prescan:.3f}s, removing first {n_drop} frames; new shape: {picked_images.shape}",
+                    )
+
+                effective_tr = frame_tr
+            else:
+                LOG.warn(
+                    "output_all_frames=True but seqtiming unavailable; falling back to TR-sampled"
                 )
-            picked_images = picked_images[:, :, n_drop:]
-            LOG.debug(
-                f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {picked_images.shape}",
-            )
+                picked_images = images[:, :, seq[idx]]
+                if prescan > 0:
+                    n_drop = int(round(prescan / tr))
+                    if n_drop >= picked_images.shape[-1]:
+                        raise ValueError(
+                            f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={picked_images.shape[-1]}."
+                        )
+                    picked_images = picked_images[:, :, n_drop:]
+                    LOG.debug(
+                        f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {picked_images.shape}",
+                    )
+                effective_tr = tr
+        else:
+            # Normal TR-sampled output
+            LOG.debug("Constructing apertures from frames...")
+            picked_images = images[:, :, seq[idx]]
+
+            if prescan > 0:
+                n_drop = int(round(prescan / tr))
+                if n_drop >= picked_images.shape[-1]:
+                    raise ValueError(
+                        f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={picked_images.shape[-1]}."
+                    )
+                picked_images = picked_images[:, :, n_drop:]
+                LOG.debug(
+                    f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {picked_images.shape}",
+                )
+            effective_tr = tr
 
         # Binarize → uint8 apertures, reshape to (H, W, 1, T)
         H, W, T = picked_images.shape
@@ -168,7 +209,7 @@ def generate_aperture_nii(
         affine = np.eye(4, dtype=np.float32)
         img = nib.Nifti1Image(apertures, affine)
         hdr = img.header
-        hdr["pixdim"][1:5] = (1.0, 1.0, 1.0, float(tr))
+        hdr["pixdim"][1:5] = (1.0, 1.0, 1.0, float(effective_tr))
         hdr["qoffset_x"] = 1.0
         hdr["qoffset_y"] = 1.0
         hdr["qoffset_z"] = 1.0
@@ -177,7 +218,7 @@ def generate_aperture_nii(
         hdr["cal_max"] = 1.0
         hdr["xyzt_units"] = 10  # mm and seconds
         nib.save(img, str(out_nii))
-        LOG.info(f"Wrote apertures NIfTI: {out_nii} (T={T}, TR={tr})")
+        LOG.info(f"Wrote apertures NIfTI: {out_nii} (T={T}, TR={effective_tr})")
 
         return (out_nii, T)
 

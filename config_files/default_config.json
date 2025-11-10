@@ -14,7 +14,8 @@
         "output_only_average": false,
         "rois": "all",
         "atlases": "all",
-        "fmriprep_analysis": "01"
+        "fmriprep_analysis": "01",
+        "output_all_frames": false
     },
     "verbose": true
 }
