@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 import h5py
-import numpy as np
 import nibabel as nib
+import numpy as np
 
 # --------------------------- public classes ----------------------------
 
@@ -127,7 +127,7 @@ class H5Frames:
 
 class MatFrames(object):
 
-    def __init__(self, mat_path):
+    def __init__(self, bids_root, params):
         """
         Initialize MatFrames for lazy access to MATLAB stimulus data.
 
@@ -138,15 +138,19 @@ class MatFrames(object):
         """
         from scipy.io import loadmat  # lazy import
 
-        m = loadmat(str(mat_path), simplify_cells=True)
+        loadMatrix_path = (
+            Path(bids_root) / "sourcedata" / "stimuli" / Path(params["loadMatrix"]).name
+        )
+
+        im = loadmat(loadMatrix_path, simplify_cells=True)
         arr = None
         # common keys
-        if "images" in m and isinstance(m["images"], np.ndarray):
-            arr = m["images"]
+        if "images" in im and isinstance(im["images"], np.ndarray):
+            arr = im["images"]
         else:
             for root in ("stimulus", "params"):
-                if root in m:
-                    obj = m[root]
+                if root in im:
+                    obj = im[root]
                     if (
                         isinstance(obj, dict)
                         and "images" in obj
@@ -154,17 +158,13 @@ class MatFrames(object):
                     ):
                         arr = obj["images"]
                         break
-        if arr is None:
-            # Fallback: take the only 3D/4D ndarray present
-            cands = [
-                v for v in m.values() if isinstance(v, np.ndarray) and v.ndim in (3, 4)
-            ]
-            if len(cands) == 1:
-                arr = cands[0]
-        if arr is None:
-            raise KeyError("Could not locate stimulus images in %s" % mat_path)
+
+        if arr is None or arr.size == 0:
+            raise KeyError("Could not locate stimulus images in %s" % loadMatrix_path)
         self._images = arr
         self._shape = tuple(arr.shape)
+
+        self._seq = np.array(params.get("seq", [])) - 1  # MATLAB to Python indexing
 
     def __len__(self):
         """
@@ -176,6 +176,14 @@ class MatFrames(object):
             Number of frames.
         """
         return int(self._shape[-1])
+
+    @property
+    def images(self):
+        return self._images
+
+    @property
+    def seq(self):
+        return self._seq
 
     @property
     def shape(self):
@@ -218,16 +226,18 @@ def _read_params_from_mat(mat_path):
     from scipy.io import loadmat
 
     m = loadmat(str(mat_path), simplify_cells=True)
+
     p = m.get("params") or {}
-    if not isinstance(p, dict):
-        p = {}
+    s = m.get("stimulus") or {}
+
     tr = float(_dig(p, "tr"))
     prescan = float(_dig(p, "prescanDuration", 0.0))
     start_scan = float(_dig(p, "startScan", 0.0))
-    seq = _dig(p, "seq", None)
-    seqtiming = _dig(p, "seqtiming", None)[1]
+    seq = _dig(s, "seq", None)
+    seqtiming = _dig(s, "seqtiming", None)[1]
     nimg = _dig(p, "numImages", None)
     nimg = int(nimg) if nimg is not None else -1
+    loadMatrix = _dig(p, "loadMatrix", None)
     return {
         "tr": tr,
         "seq": seq,
@@ -235,6 +245,7 @@ def _read_params_from_mat(mat_path):
         "prescan": prescan,
         "start_scan": start_scan,
         "numImages": nimg,
+        "loadMatrix": loadMatrix,
     }
 
 
@@ -460,7 +471,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                 raise FileNotFoundError("force_params mat not found: %s" % mat_path)
 
             p = _read_params_from_mat(mat_path)
-            frames = MatFrames(mat_path)
+            frames = MatFrames(bids_root, p)
             return StimSpec(
                 kind="forced_mat",
                 task=str(forced_task),
@@ -471,7 +482,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                 frames=frames,
                 aperture_nii=None,
                 meta={"mat": str(mat_path)},
-                seqtiming=None,
+                seqtiming=p["seqtiming"],
             )
         else:
             raise ValueError(
@@ -522,7 +533,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
         for mp in cand:
             if mp.is_file():
                 p = _read_params_from_mat(mp)
-                frames = MatFrames(mp)
+                frames = MatFrames(bids_root, p)
                 return StimSpec(
                     kind="vistadisp_mat",
                     task=str(task),
@@ -533,7 +544,7 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
                     frames=frames,
                     aperture_nii=None,
                     meta={"mat": str(mp)},
-                    seqtiming=None,
+                    seqtiming=p["seqtiming"],
                 )
 
     # ---- 4) precomputed apertures (+ optional task JSON) ----
@@ -544,7 +555,11 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
         if jp.is_file():
             timing = _read_params_from_json(jp)
         if timing is None:
-            timing = {"tr": nib.load(ap).header['pixdim'][4], "prescan": 0.0, "start_scan": 0.0}
+            timing = {
+                "tr": nib.load(ap).header["pixdim"][4],
+                "prescan": 0.0,
+                "start_scan": 0.0,
+            }
         nT = _nifti_timepoints(ap)
         return StimSpec(
             kind="precomp_aperture",

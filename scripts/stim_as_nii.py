@@ -115,7 +115,7 @@ def generate_aperture_nii(
             )
 
         images = getattr(getattr(stim, "frames", None), "images", None)
-        seq = getattr(getattr(stim, "frames", None), "seq", None)
+        seq = getattr(stim, "seq", None)
         tr = getattr(stim, "tr", None)
         prescan = getattr(stim, "prescan", 0.0)
 

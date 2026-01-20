@@ -43,6 +43,7 @@ ATLAS_WANG = "wang"
 ATLAS_BENSON = "benson"
 ATLAS_FULLBRAIN = "fullBrain"
 ATLAS_FS_CUSTOM = "fs_custom"
+ATLAS_NIFTI_CUSTOM = "nifti_custom"
 
 # Special ROI labels
 ROI_UNKNOWN = "Unknown"
@@ -486,25 +487,79 @@ def _benson_labels(hemi: str) -> dict:
 # -------------------------------- atlas helpers --------------------------------
 
 
+def _resolve_fs_subject_dir(
+    fs_dir: Path | str, sub: str, sess: str | None = None
+) -> Path:
+    """
+    Resolve FreeSurfer subject directory, checking for new layout if old doesn't exist.
+
+    Parameters
+    ----------
+    fs_dir : Path | str
+        Base FreeSurfer directory
+    sub : str
+        Subject ID
+    sess : str | None, optional
+        Session ID for new layout fallback
+
+    Returns
+    -------
+    Path
+        Resolved subject directory path
+    """
+    fs_dir = Path(fs_dir)
+    old_path = fs_dir / f"sub-{sub}"
+
+    if old_path.exists():
+        return old_path
+
+    # Try new layout with session if available
+    if sess:
+        new_path = fs_dir / f"sub-{sub}_ses-{sess}"
+        if new_path.exists():
+            return new_path
+
+    # Try to find any session directory for this subject
+    pattern = fs_dir / f"sub-{sub}_ses-*"
+    matches = sorted(pattern.parent.glob(pattern.name))
+    if matches:
+        return matches[0]
+
+    # Return old path as default (will fail later if doesn't exist)
+    return old_path
+
+
 def _build_atlas_path(
-    fs_dir: Path | str, sub: str, hemi: str, atlas: str, analysis_space: str
+    fs_dir: Path | str,
+    sub: str,
+    hemi: str,
+    atlas: str,
+    analysis_space: str,
+    sess: str | None = None,
 ) -> Path:
     """Build file path for surface atlas files."""
-    sub_path = f"sub-{sub}" if analysis_space == SPACE_FSNATIVE else "fsaverage"
+    sub_path = _resolve_fs_subject_dir(fs_dir, sub, sess).name if analysis_space == SPACE_FSNATIVE else "fsaverage"
     atlas_file = ATLAS_FILES[atlas]
     return Path(fs_dir) / sub_path / "surf" / f"{hemi}h.{atlas_file}"
 
 
 def _load_fullbrain_mask(
-    fs_dir: Path | str, sub: str, hemi: str, analysis_space: str
+    fs_dir: Path | str,
+    sub: str,
+    hemi: str,
+    analysis_space: str,
+    sess: str | None = None,
 ) -> dict:
     """Load fullbrain mask by inferring vertex count from existing atlas."""
     fs_dir = Path(fs_dir)
-    sub_path = f"sub-{sub}" if analysis_space == SPACE_FSNATIVE else "fsaverage"
+    if analysis_space == SPACE_FSNATIVE:
+        sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
+    else:
+        sub_dir = fs_dir / "fsaverage"
 
     # Try wang atlas first, then benson
     for atlas in [ATLAS_WANG, ATLAS_BENSON]:
-        areas_path = fs_dir / sub_path / "surf" / f"{hemi}h.{ATLAS_FILES[atlas]}"
+        areas_path = sub_dir / "surf" / f"{hemi}h.{ATLAS_FILES[atlas]}"
         if areas_path.exists():
             n = int(nib.load(str(areas_path)).get_fdata().squeeze().shape[0])
             return {(hemi, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): np.ones((n,), dtype=bool)}
@@ -515,10 +570,15 @@ def _load_fullbrain_mask(
 
 
 def _load_atlas_data_and_labels(
-    fs_dir: Path | str, sub: str, hemi: str, atlas: str, analysis_space: str
+    fs_dir: Path | str,
+    sub: str,
+    hemi: str,
+    atlas: str,
+    analysis_space: str,
+    sess: str | None = None,
 ) -> tuple[np.ndarray, dict]:
     """Load atlas data and corresponding labels."""
-    atlas_path = _build_atlas_path(fs_dir, sub, hemi, atlas, analysis_space)
+    atlas_path = _build_atlas_path(fs_dir, sub, hemi, atlas, analysis_space, sess)
     if not atlas_path.exists():
         raise AtlasNotFoundError(f"{atlas.title()} atlas missing: {atlas_path}")
 
@@ -535,7 +595,12 @@ def _load_atlas_data_and_labels(
 
 
 def _load_custom_atlas(
-    fs_dir: Path | str, sub: str, hemi: str, atlas: str, analysis_space: str
+    fs_dir: Path | str,
+    sub: str,
+    hemi: str,
+    atlas: str,
+    analysis_space: str,
+    sess: str | None = None,
 ) -> tuple[np.ndarray, dict, str]:
     """Load custom FreeSurfer annotation atlas."""
     if analysis_space == SPACE_VOLUME:
@@ -543,7 +608,8 @@ def _load_custom_atlas(
     if f"{hemi}h." not in atlas:
         raise UnsupportedAtlasError(f"Custom atlas {atlas} not for hemisphere {hemi}")
 
-    annot_path = Path(fs_dir) / f"sub-{sub}" / "customLabel" / atlas
+    sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
+    annot_path = sub_dir / "customLabel" / atlas
     if not annot_path.exists():
         raise AtlasNotFoundError(f"Custom atlas missing: {annot_path}")
 
@@ -583,6 +649,57 @@ def _create_roi_masks(
     return masks
 
 
+def _load_nifti_custom_atlas(
+    atlas_info: dict, analysis_space: str
+) -> tuple[np.ndarray, dict, str]:
+    """Load custom NIfTI atlas with text label file.
+
+    Parameters
+    ----------
+    atlas_info : dict
+        Dict with keys 'name', 'nifti', 'labels' (file paths)
+    analysis_space : str
+        Analysis space (volume/surface)
+
+    Returns
+    -------
+    areas : np.ndarray
+        Atlas label data
+    area_labels : dict
+        Mapping of ROI names to label values
+    atlas_name : str
+        Name of the atlas
+    """
+    nifti_path = Path(atlas_info["nifti"])
+    label_path = Path(atlas_info["labels"])
+
+    if not nifti_path.exists():
+        raise AtlasNotFoundError(f"Custom NIfTI atlas missing: {nifti_path}")
+    if not label_path.exists():
+        raise AtlasNotFoundError(f"Custom atlas labels missing: {label_path}")
+
+    # Load NIfTI data
+    areas = nib.load(str(nifti_path)).get_fdata().squeeze()
+
+    # Parse label text file (format: "label_value ROI_name" per line)
+    area_labels = {ROI_UNKNOWN: 0}
+    with open(label_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                try:
+                    label_val = int(parts[0])
+                    roi_name = parts[1]
+                    area_labels[roi_name] = label_val
+                except ValueError:
+                    continue
+
+    return areas, area_labels, atlas_info["name"]
+
+
 # -------------------------------- mask builders --------------------------------
 
 
@@ -593,6 +710,7 @@ def _surface_masks_for_atlas(
     atlas: str,
     rois: Iterable[str],
     analysis_space: str,
+    sess: str | None = None,
     verbose: bool = False,
 ) -> dict:
     """
@@ -600,22 +718,22 @@ def _surface_masks_for_atlas(
     """
     try:
         if atlas == ATLAS_FULLBRAIN:
-            return _load_fullbrain_mask(fs_dir, sub, hemi, analysis_space)
+            return _load_fullbrain_mask(fs_dir, sub, hemi, analysis_space, sess)
 
         elif atlas in [ATLAS_BENSON, ATLAS_WANG]:
             areas, labels = _load_atlas_data_and_labels(
-                fs_dir, sub, hemi, atlas, analysis_space
+                fs_dir, sub, hemi, atlas, analysis_space, sess
             )
             return _create_roi_masks(areas, labels, hemi, atlas, rois)
 
         elif ATLAS_FS_CUSTOM in atlas:
             areas, labels, atlas_name = _load_custom_atlas(
-                fs_dir, sub, hemi, atlas, analysis_space
+                fs_dir, sub, hemi, atlas, analysis_space, sess
             )
             return _create_roi_masks(areas, labels, hemi, atlas_name, rois)
 
         else:
-            # Unknown atlas
+            # Unknown atlas (ignore custom NIfTI in surface mode)
             return {}
 
     except (AtlasNotFoundError, UnsupportedAtlasError) as e:
@@ -658,20 +776,78 @@ def _resample_images_to_bold(atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_i
     return atlas_vol_img, lh_ribbon_img, rh_ribbon_img
 
 
+def _dilate_atlas_with_distance_assignment(atlas_base, unique_labels):
+    """Dilate atlas labels using distance-based assignment at borders.
+
+    Parameters
+    ----------
+    atlas_base : np.ndarray
+        Original atlas with integer labels
+    unique_labels : np.ndarray
+        Array of unique label values (excluding 0)
+
+    Returns
+    -------
+    np.ndarray
+        Dilated atlas with disputed voxels assigned to nearest label
+    """
+    from scipy.ndimage import binary_dilation, distance_transform_edt
+
+    atlas = np.copy(atlas_base)
+    if len(unique_labels) == 0:
+        return atlas
+
+    # Create union of all dilated masks to find disputed territory
+    union_dilated = np.zeros_like(atlas_base, dtype=bool)
+    for label in unique_labels:
+        label_mask = atlas_base == label
+        dilated_mask = binary_dilation(label_mask, structure=np.ones((3, 3, 3)))
+        union_dilated |= dilated_mask
+
+    # Find voxels that need assignment (in union but not in original)
+    to_assign = union_dilated & (atlas_base == 0)
+
+    if np.any(to_assign):
+        # For each label, compute distance transform from original mask
+        min_distances = np.full(atlas_base.shape, np.inf)
+        nearest_labels = np.zeros_like(atlas_base)
+
+        for label in unique_labels:
+            label_mask = atlas_base == label
+            distances = distance_transform_edt(~label_mask)
+            closer = distances < min_distances
+            min_distances[closer] = distances[closer]
+            nearest_labels[closer] = label
+
+        # Assign disputed voxels to nearest label
+        atlas[to_assign] = nearest_labels[to_assign]
+
+    return atlas
+
+
 def _create_volume_roi_masks(
-    atlas_vol, lh_ribbon, rh_ribbon, labels_l, labels_r, atlas, rois, dilate=True
+    atlas_vol,
+    lh_ribbon,
+    rh_ribbon,
+    labels_l,
+    labels_r,
+    atlas,
+    rois,
+    dilate=True,
 ):
     """Create volume ROI masks for both hemispheres."""
-    from scipy.ndimage import grey_dilation
-
-    # Apply dilation if requested
     if dilate:
-        atlas_l = grey_dilation(
-            atlas_vol * lh_ribbon.astype(atlas_vol.dtype), size=(1, 1, 1)
-        )
-        atlas_r = grey_dilation(
-            atlas_vol * rh_ribbon.astype(atlas_vol.dtype), size=(1, 1, 1)
-        )
+        atlas_l_base = atlas_vol * lh_ribbon.astype(atlas_vol.dtype)
+        atlas_r_base = atlas_vol * rh_ribbon.astype(atlas_vol.dtype)
+
+        # Get unique labels (excluding 0) and dilate using distance-based assignment
+        unique_labels_l = np.unique(atlas_l_base)
+        unique_labels_l = unique_labels_l[unique_labels_l > 0]
+        atlas_l = _dilate_atlas_with_distance_assignment(atlas_l_base, unique_labels_l)
+
+        unique_labels_r = np.unique(atlas_r_base)
+        unique_labels_r = unique_labels_r[unique_labels_r > 0]
+        atlas_r = _dilate_atlas_with_distance_assignment(atlas_r_base, unique_labels_r)
     else:
         atlas_l = atlas_vol * lh_ribbon
         atlas_r = atlas_vol * rh_ribbon
@@ -713,16 +889,19 @@ def _volume_masks_for_atlas(
     resample: bool = True,
     bold_img: Path | str | None = None,
     dilate: bool = True,
+    nifti_custom_atlases: Optional[list] = None,
+    sess: str | None = None,
 ) -> dict:
     """
     Return dict of boolean 3D masks in T1w space keyed by (hemi, atlas, roi),
     or ('both','fullBrain','fullBrain') for volume-wide masks.
     """
     fs_dir = Path(fs_dir)
+    sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
 
     # Load cortical ribbon files
-    lh_ribbon_path = fs_dir / f"sub-{sub}" / "mri" / "lh.ribbon.mgz"
-    rh_ribbon_path = fs_dir / f"sub-{sub}" / "mri" / "rh.ribbon.mgz"
+    lh_ribbon_path = sub_dir / "mri" / "lh.ribbon.mgz"
+    rh_ribbon_path = sub_dir / "mri" / "rh.ribbon.mgz"
 
     if not (lh_ribbon_path.exists() and rh_ribbon_path.exists()):
         raise AtlasNotFoundError(
@@ -747,17 +926,40 @@ def _volume_masks_for_atlas(
         labels_r = _benson_labels(HEMI_RIGHT)
     elif atlas == ATLAS_WANG:
         labels_l = labels_r = _wang_labels()
+    elif ATLAS_NIFTI_CUSTOM in atlas or (
+        nifti_custom_atlases and atlas in [a["name"] for a in nifti_custom_atlases]
+    ):
+        # Find the matching atlas info
+        atlas_info = None
+        if nifti_custom_atlases:
+            for a in nifti_custom_atlases:
+                if a["name"] == atlas:
+                    atlas_info = a
+                    break
+        if not atlas_info:
+            raise UnsupportedAtlasError(f"Custom NIfTI atlas '{atlas}' info not found")
+
+        # Load the custom atlas - for volume it should already be in volume space
+        areas, labels, atlas_name = _load_nifti_custom_atlas(atlas_info, SPACE_VOLUME)
+        # For volume, we assume the NIfTI already has both hemispheres
+        labels_l = labels_r = labels
+
+        # Load as volume image
+        atlas_vol_img = nib.load(str(atlas_info["nifti"]))
+
+        dilate = False  # Assume already preprocessed
     else:
-        # Volume supports only benson/wang/fullBrain
+        # Volume supports only benson/wang/fullBrain/custom
         raise UnsupportedAtlasError(
-            f"Atlas '{atlas}' not supported in volume space. Use: {ATLAS_BENSON}, {ATLAS_WANG}, or {ATLAS_FULLBRAIN}"
+            f"Atlas '{atlas}' not supported in volume space. Use: {ATLAS_BENSON}, {ATLAS_WANG}, {ATLAS_FULLBRAIN}, or custom NIfTI"
         )
 
-    atlas_vol_path = fs_dir / f"sub-{sub}" / "mri" / ATLAS_VOLUME_FILES[atlas]
-    if not atlas_vol_path.exists():
-        raise AtlasNotFoundError(f"Atlas volume missing: {atlas_vol_path}")
-
-    atlas_vol_img = nib.load(str(atlas_vol_path))
+    # Load atlas volume path for standard atlases
+    if atlas in [ATLAS_BENSON, ATLAS_WANG]:
+        atlas_vol_path = sub_dir / "mri" / ATLAS_VOLUME_FILES[atlas]
+        if not atlas_vol_path.exists():
+            raise AtlasNotFoundError(f"Atlas volume missing: {atlas_vol_path}")
+        atlas_vol_img = nib.load(str(atlas_vol_path))
 
     # Resample to BOLD space if requested
     if resample and bold_img is not None:
@@ -780,7 +982,12 @@ def _volume_masks_for_atlas(
 
 
 def _run_neuropythy(
-    fs_dir: Path | str, sub: str, analysis_space: str, custom_annots=None, LOG=None
+    fs_dir: Path | str,
+    sub: str,
+    ses: str | None,
+    analysis_space: str,
+    custom_annots=None,
+    LOG=None,
 ) -> None:
     """
     Ensure Neuropythy outputs exist for subject (and fsaverage if needed),
@@ -794,7 +1001,7 @@ def _run_neuropythy(
         ) from e
 
     fs_dir = Path(fs_dir)
-    subject = f"sub-{sub}" if not str(sub).startswith("sub-") else str(sub)
+    subject = _resolve_fs_subject_dir(fs_dir, sub, ses).name
 
     # Subject-level Benson maps
     subj_benson = fs_dir / subject / "mri" / "benson14_varea.mgz"
@@ -812,7 +1019,10 @@ def _run_neuropythy(
     # Custom annot projection fsaverage -> subject
     if custom_annots:
         os.environ["SUBJECTS_DIR"] = str(fs_dir)
-        dest_dir = fs_dir / subject / "customLabel"
+        # For custom annots, we need to determine if using new layout
+        # Extract session from context if available (passed through ctx)
+        sub_dir = _resolve_fs_subject_dir(fs_dir, sub, ses)
+        dest_dir = sub_dir / "customLabel"
         dest_dir.mkdir(parents=True, exist_ok=True)
         for annot in map(Path, custom_annots):
             dst = dest_dir / annot.name
@@ -865,6 +1075,7 @@ def prepare_roi_pack(
     fs_dir: Path | str,
     out_base: Path | str,
     custom_annots: Optional[Iterable[str]] = None,
+    nifti_custom_atlases: Optional[list] = None,
     bold_img: Optional[Path | str] = None,
     verbose: bool = False,
 ) -> RoiPack:
@@ -877,6 +1088,7 @@ def prepare_roi_pack(
         └── all_roi_masks_meta.json   (contains the same 'key' and canonical meta)
     """
     sub = ctx.get("sub")
+    ses = ctx.get("ses")  # Extract session for new layout support
     LOG = ctx.get("log") or get_logger(
         __file__, verbose=bool(verbose or ctx.get("verbose", False))
     )
@@ -887,7 +1099,9 @@ def prepare_roi_pack(
     _validate_inputs(analysis_space, atlases, rois)
 
     # Ensure prerequisites (idempotent)
-    _run_neuropythy(fs_dir, sub, analysis_space, custom_annots=custom_annots, LOG=LOG)
+    _run_neuropythy(
+        fs_dir, sub, ses, analysis_space, custom_annots=custom_annots, LOG=LOG
+    )
 
     # Output locations (space lives outside in folder structure as you prefer)
     out_dir = out_base / f"sub-{sub}"
@@ -925,7 +1139,14 @@ def prepare_roi_pack(
             for hemi in (HEMI_LEFT, HEMI_RIGHT):
                 roi_masks.update(
                     _surface_masks_for_atlas(
-                        fs_dir, sub, hemi, atlas, rois, analysis_space, verbose=verbose
+                        fs_dir,
+                        sub,
+                        hemi,
+                        atlas,
+                        rois,
+                        analysis_space,
+                        sess=ses,
+                        verbose=verbose,
                     )
                 )
         # Persist surface under root
@@ -959,7 +1180,14 @@ def prepare_roi_pack(
 
         # build ROI masks for this grid
         for atlas in atlases:
-            if atlas not in (ATLAS_BENSON, ATLAS_WANG, ATLAS_FULLBRAIN):
+            # Allow custom nifti atlases in volume space
+            is_custom_nifti = nifti_custom_atlases and atlas in [
+                a["name"] for a in nifti_custom_atlases
+            ]
+            if (
+                atlas not in (ATLAS_BENSON, ATLAS_WANG, ATLAS_FULLBRAIN)
+                and not is_custom_nifti
+            ):
                 LOG.debug(f"Skipping atlas '{atlas}' in volume space (unsupported).")
                 continue
             roi_masks.update(
@@ -969,6 +1197,8 @@ def prepare_roi_pack(
                     atlas,
                     rois,
                     bold_img=bimg,
+                    nifti_custom_atlases=nifti_custom_atlases,
+                    sess=ses,
                 )
             )
         # write grid metadata and masks under the grid group with a lightweight lock
