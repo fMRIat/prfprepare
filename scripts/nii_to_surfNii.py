@@ -52,6 +52,7 @@ def _load_bold_data(in_path):
 
     return data, img
 
+
 def apply_masks_to_run(
     ctx,
     stim,
@@ -114,6 +115,21 @@ def apply_masks_to_run(
 
         # --- load BOLD
         data, img = _load_bold_data(in_path)
+
+        # Trim BOLD data based on start_scan
+        # start_scan in seconds: volumes are acquired but stimulus not yet started
+        start_scan = int(
+            round(getattr(stim, "start_scan", 0.0) / tr)
+        )  # start_scan in seconds, convert to volume index
+        if start_scan > 0:
+            if start_scan >= data.shape[-1]:
+                raise ValueError(
+                    f"start_scan would remove all volumes: start_scan={start_scan}, total volumes={data.shape[-1]}"
+                )
+            data = data[..., start_scan:]
+            LOG.debug(
+                f"start_scan={getattr(stim, 'start_scan', 0.0):.3f}s, removing first {start_scan} volumes; new shape: {data.shape}"
+            )
 
         # Select correct grid (surface clears selection; volume picks grid by shape+affine)
         try:

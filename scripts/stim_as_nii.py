@@ -117,7 +117,11 @@ def generate_aperture_nii(
         images = getattr(getattr(stim, "frames", None), "images", None)
         seq = getattr(stim, "seq", None)
         tr = getattr(stim, "tr", None)
-        prescan = getattr(stim, "prescan", 0.0)
+
+        prescan = getattr(
+            stim, "prescan", 0.0
+        )  # prescan in seconds, stimulus is already running and showing blank (but no volumes are acquired yet?),
+        # need to remove first images from the stimulus
 
         # get the seqtiming and compute shift
         seqTiming = getattr(stim, "seqtiming", None)
