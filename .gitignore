@@ -13,3 +13,5 @@ config_files/scientific_free.yml
 **/*.pyc
 **/*.pyo
 **/*cpython*
+fs_cache/
+fs_cache/*
