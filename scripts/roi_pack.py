@@ -538,7 +538,11 @@ def _build_atlas_path(
     sess: str | None = None,
 ) -> Path:
     """Build file path for surface atlas files."""
-    sub_path = _resolve_fs_subject_dir(fs_dir, sub, sess).name if analysis_space == SPACE_FSNATIVE else "fsaverage"
+    sub_path = (
+        _resolve_fs_subject_dir(fs_dir, sub, sess).name
+        if analysis_space == SPACE_FSNATIVE
+        else "fsaverage"
+    )
     atlas_file = ATLAS_FILES[atlas]
     return Path(fs_dir) / sub_path / "surf" / f"{hemi}h.{atlas_file}"
 

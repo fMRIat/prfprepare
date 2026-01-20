@@ -126,13 +126,94 @@ RUN bash -c 'eval "$(micromamba shell hook --shell bash)"' && \
 ENV PATH="/opt/conda/envs/scientific/bin:$PATH" \
     LD_LIBRARY_PATH="/opt/foo/lib:${LD_LIBRARY_PATH:-}" \
     CPATH="/opt/foo/include:${CPATH:-}"
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update --fix-missing \
+ && apt install -y --no-install-recommends \
+      libglib2.0-0 \
+      libxext6 \
+      libsm6 \
+      libxrender1 \
+      git \
+      mercurial \
+      subversion \
+      grep \
+      sed \
+      dpkg \
+      gcc \
+      g++ \
+      libeigen3-dev \
+      zlib1g-dev \
+      libgl1-mesa-dev \
+      libfftw3-dev \
+      libtiff5-dev \
+      libxt6 \
+      libxcomposite1 \
+      libfontconfig1 \
+      libasound2t64 \
+      bc \
+      tcsh \
+      libgomp1 \
+      python3-pip \
+      perl-modules \
+      xvfb \
+      xfonts-100dpi \
+      xfonts-75dpi \
+      xfonts-cyrillic \
+      python-is-python3 \
+      imagemagick \
+      wget \
+      subversion\
+      vim && \
+      apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+
+# Install files from freesurfer stage
+COPY --from=freesurfer /opt/freesurfer /opt/freesurfer
+
+# Simulate SetUpFreeSurfer.sh
+ENV OS="Linux" \
+    FS_OVERRIDE=0 \
+    FIX_VERTEX_AREA="" \
+    FSF_OUTPUT_FORMAT="nii.gz" \
+    FREESURFER_HOME="/opt/freesurfer"
+ENV SUBJECTS_DIR="$FREESURFER_HOME/subjects" \
+    FUNCTIONALS_DIR="$FREESURFER_HOME/sessions" \
+    MNI_DIR="$FREESURFER_HOME/mni" \
+    LOCAL_DIR="$FREESURFER_HOME/local" \
+    MINC_BIN_DIR="$FREESURFER_HOME/mni/bin" \
+    MINC_LIB_DIR="$FREESURFER_HOME/mni/lib" \
+    MNI_DATAPATH="$FREESURFER_HOME/mni/data"
+ENV PERL5LIB="$MINC_LIB_DIR/perl5/5.8.5" \
+    MNI_PERL5LIB="$MINC_LIB_DIR/perl5/5.8.5" \
+    PATH="$FREESURFER_HOME/bin:$FREESURFER_HOME/tktools:$MINC_BIN_DIR:$PATH"
+
+
+# Install files from micromamba stage
+COPY --from=micromamba /bin/micromamba /bin/micromamba
+COPY --from=micromamba /opt/conda/envs/scientific /opt/conda/envs/scientific
+
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+RUN bash -c 'eval "$(micromamba shell hook --shell bash)"' && \
+    echo "micromamba activate scientific" >> $HOME/.bashrc
+# Prepend scientific env paths while preserving prior values only if they exist.
+ENV PATH="/opt/conda/envs/scientific/bin:$PATH" \
+    LD_LIBRARY_PATH="/opt/foo/lib:${LD_LIBRARY_PATH:-}" \
+    CPATH="/opt/foo/include:${CPATH:-}"
 
 # Copy and configure run script and metadata code
 COPY bin/run \
 	bin/run.py \
 	scripts/stim_as_nii.py    \
+	bin/run.py \
+	scripts/stim_as_nii.py    \
 	scripts/nii_to_surfNii.py \
 	scripts/link_stimuli.py    \
+	scripts/stim_loader.py    \
+	scripts/roi_pack.py    \
+	scripts/prfprepare_logging.py    \
+	scripts/roipack/roipack.py    \
+	config_files/default_config.json    \
+      ${SCRIPTS_DIR}/
 	scripts/stim_loader.py    \
 	scripts/roi_pack.py    \
 	scripts/prfprepare_logging.py    \
@@ -153,7 +234,19 @@ RUN chmod +x \
 	${SCRIPTS_DIR}/roipack.py \
 	${SCRIPTS_DIR}/default_config.json
 WORKDIR ${SCRIPTS_DIR}
+      ${SCRIPTS_DIR}/run \
+      ${SCRIPTS_DIR}/run.py \
+	${SCRIPTS_DIR}/stim_as_nii.py    \
+	${SCRIPTS_DIR}/nii_to_surfNii.py \
+	${SCRIPTS_DIR}/link_stimuli.py \
+	${SCRIPTS_DIR}/stim_loader.py \
+	${SCRIPTS_DIR}/roi_pack.py \
+	${SCRIPTS_DIR}/prfprepare_logging.py \
+	${SCRIPTS_DIR}/roipack.py \
+	${SCRIPTS_DIR}/default_config.json
+WORKDIR ${SCRIPTS_DIR}
 # Run the run.sh script on entry.
+ENTRYPOINT ["/base/scripts/run"]
 ENTRYPOINT ["/base/scripts/run"]
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh

@@ -4,6 +4,12 @@ from pathlib import Path
 from shutil import copy2
 from typing import Optional
 
+# stim_as_nii.py
+
+from pathlib import Path
+from shutil import copy2
+from typing import Optional
+
 import nibabel as nib
 import numpy as np
 from prfprepare_logging import get_logger
