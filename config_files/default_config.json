@@ -15,7 +15,9 @@
         "rois": "all",
         "atlases": "all",
         "fmriprep_analysis": "01",
-        "output_all_frames": false
+        "output_all_frames": false,
+        "flip_ud": false,
+        "flip_lr": false
     },
     "verbose": true
 }

@@ -101,6 +101,9 @@ def generate_aperture_nii(
             return (out_nii, out_nii_nT)
 
         # If a precomputed aperture is given, just copy it here (idempotent).
+        flip_ud = ctx.get("flip_ud", False)
+        flip_lr = ctx.get("flip_lr", False)
+
         precomp = getattr(stim, "aperture_nii", None)
         if precomp:
             LOG.debug(f"Using precomputed aperture: {precomp}")
@@ -108,7 +111,17 @@ def generate_aperture_nii(
             if not src.exists():
                 raise FileNotFoundError(f"Precomputed aperture not found: {src}")
             if force or not out_nii.exists():
-                copy2(src, out_nii)
+                if flip_ud or flip_lr:
+                    _img = nib.load(str(src))
+                    _data = np.asarray(_img.dataobj).copy()
+                    if flip_ud:
+                        _data = np.flip(_data, axis=0).copy()
+                    if flip_lr:
+                        _data = np.flip(_data, axis=1).copy()
+                    nib.save(nib.Nifti1Image(_data, _img.affine, _img.header), str(out_nii))
+                    LOG.debug(f"Saved flipped precomputed aperture to {out_nii} (flip_ud={flip_ud}, flip_lr={flip_lr})")
+                else:
+                    copy2(src, out_nii)
             out_nii_nT = nib.load(str(out_nii)).shape[-1]
             LOG.debug(f"Copied precomputed aperture to {out_nii} (T={out_nii_nT})")
             return (out_nii, out_nii_nT)
@@ -214,6 +227,13 @@ def generate_aperture_nii(
         a, a_count = np.unique(picked_images, return_counts=True)
         apertures = (picked_images != a[np.argmax(a_count)]).astype(np.uint8)
         apertures = apertures.reshape(H, W, 1, T)
+
+        if flip_ud:
+            apertures = np.flip(apertures, axis=0).copy()
+        if flip_lr:
+            apertures = np.flip(apertures, axis=1).copy()
+        if flip_ud or flip_lr:
+            LOG.debug(f"Applied stimulus flips: flip_ud={flip_ud}, flip_lr={flip_lr}")
 
         # Write NIfTI
         affine = np.eye(4, dtype=np.float32)

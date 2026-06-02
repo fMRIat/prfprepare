@@ -635,6 +635,8 @@ def process_subject_session(config: dict, in_root: Path):
     output_only_average = bool(config.get("output_only_average", False))
     use_numImages = bool(config.get("use_numImages", False))
     output_all_frames = bool(cconfig.get("output_all_frames", False))
+    ctx["flip_ud"] = bool(cconfig.get("flip_ud", False))
+    ctx["flip_lr"] = bool(cconfig.get("flip_lr", False))
     ctx["etcorr"] = bool(config.get("etcorrection", False))
     ctx["force"] = bool(config.get("force", False))
 
