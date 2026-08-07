@@ -260,7 +260,7 @@ def _bold_path_for(
         raise ValueError(f"Unsupported analysis_space: {analysis_space}")
 
 
-def _average_runs_bold(bold_paths, LOG) -> Path:
+def _average_runs_bold(bold_paths, LOG):
     """Crop to shortest T and compute voxel-wise mean across multiple BOLD runs.
 
     Parameters
@@ -272,8 +272,9 @@ def _average_runs_bold(bold_paths, LOG) -> Path:
 
     Returns
     -------
-    Path
-        Path to the averaged BOLD file.
+    nibabel image
+        The averaged BOLD as an in-memory image (GiftiImage or Nifti1Image); it is
+        not written to disk, so it has no filename.
 
     Raises
     ------
@@ -561,6 +562,33 @@ def _config2list(c, base=None):
     return items
 
 
+# Known atlas keywords mapped to their canonical (snake_case) spelling.
+# Anything not in here (e.g. custom annotation filenames) is left untouched.
+_ATLAS_ALIASES = {
+    "benson": "benson",
+    "wang": "wang",
+    "fs_custom": "fs_custom",
+    "fscustom": "fs_custom",
+    "full_brain": "full_brain",
+    "fullbrain": "full_brain",
+    "whole_brain": "full_brain",
+    "wholebrain": "full_brain",
+}
+
+
+def _canon_atlas(name):
+    """Canonicalize a known atlas keyword case-insensitively.
+
+    Recognized keywords (benson, wang, fs_custom, full_brain and their common
+    aliases) map to their canonical spelling regardless of casing; unrecognized
+    values such as custom annotation filenames are returned unchanged so their
+    original casing is preserved.
+    """
+    if not isinstance(name, str):
+        return name
+    return _ATLAS_ALIASES.get(name.strip().lower(), name)
+
+
 # -------------------------------- orchestrator -------------------------------
 def process_subject_session(config: dict, in_root: Path):
     """Orchestrate processing for all tasks/runs across subjects and sessions.
@@ -630,9 +658,10 @@ def process_subject_session(config: dict, in_root: Path):
         raise FileNotFoundError(f"FreeSurfer dir not found: {fs_dir}")
 
     # Core options
-    analysis_space = cconfig.get("analysisSpace", "fsnative")
+    analysis_space = str(cconfig.get("analysisSpace", "fsnative")).strip().lower()
     average_runs = bool(cconfig.get("average_runs", False))
     output_only_average = bool(config.get("output_only_average", False))
+    continue_on_error = bool(config.get("continue_on_error", True))
     use_numImages = bool(config.get("use_numImages", False))
     output_all_frames = bool(cconfig.get("output_all_frames", False))
     ctx["flip_ud"] = bool(cconfig.get("flip_ud", False))
@@ -659,6 +688,22 @@ def process_subject_session(config: dict, in_root: Path):
     atlases = _config2list(
         cconfig.get("atlases", ["wang"]), ["benson", "wang", "fs_custom"]
     )
+    # Canonicalize known atlas keywords case-insensitively (custom filenames pass through)
+    atlases = [_canon_atlas(a) for a in atlases]
+
+    # full_brain export: write all cortical vertices/voxels to the prfprepare
+    # output while still storing wang+benson in all_roi_masks.h5 as an aid for
+    # manual visual-area segmentation. Co-store the standard atlases so the h5
+    # always carries the atlas information (set rois:"all" for the full aid).
+    if "full_brain" in atlases:
+        for std in ("wang", "benson"):
+            if std not in atlases:
+                atlases.append(std)
+        LOG.info(
+            "full_brain requested: exporting all cortical vertices/voxels and "
+            "storing wang+benson atlases in all_roi_masks.h5 as a segmentation aid."
+        )
+
     rois = _config2list(cconfig.get("rois", ["V1"]), ["all"])
 
     # check if there is the custom.zip, if yes unzip
@@ -791,7 +836,15 @@ def process_subject_session(config: dict, in_root: Path):
                     LOG.debug(
                         f"Stimulus resolved (kind={getattr(stim, 'kind', 'n/a')}, n_frames={getattr(stim, 'n_frames', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
                     )
-                except Exception:
+                except Exception as e:
+                    LOG.error(
+                        f"Skipping task-{task} for sub-{sub} ses-{ses or 'NA'}: {e}"
+                    )
+                    if continue_on_error:
+                        # clean up inner-scope ctx keys before skipping the task
+                        ctx.pop("func_out", None)
+                        ctx.pop("stim_out", None)
+                        continue
                     raise
 
                 # Output dirs
@@ -851,6 +904,7 @@ def process_subject_session(config: dict, in_root: Path):
                     all_run_paths = []
                     for run in runs:
                         ctx["run"] = run
+                        ctx.pop("bold_path", None)
                         LOG.info(
                             f"Subject {sub} | Session {ses or 'NA'} | Task {task} | Run {run} | Hemi {hemi.upper() or 'NA'}"
                         )
@@ -902,11 +956,7 @@ def process_subject_session(config: dict, in_root: Path):
                                 fs_dir=fs_dir,
                                 custom_annots=custom_annots if custom_annots else None,
                                 out_base=out_base,
-                                bold_img=(
-                                    ctx.get("bold_path")
-                                    if analysis_space == "volume"
-                                    else None
-                                ),
+                                bold_img=ctx.get("bold_path"),
                             )
                             LOG.debug(
                                 f"ROI cache ready (key={getattr(roi_pack, 'key', 'n/a')}, file={getattr(roi_pack, 'h5_path', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
@@ -927,15 +977,17 @@ def process_subject_session(config: dict, in_root: Path):
 
                             all_run_paths.append(ctx["bold_path"])
 
-                            del ctx["bold_path"]
+                            ctx.pop("bold_path", None)
 
                         except Exception as e:
                             LOG.error(
                                 f"Failed run: sub-{sub} ses-{ses or 'NA'} task-{task} run-{run} ({e})"
                             )
+                            if continue_on_error:
+                                continue
                             raise
 
-                        del ctx["run"]
+                        ctx.pop("run", None)
 
                     # Averaging across runs (optional)
                     if average_runs and len(all_run_paths) >= 2:
@@ -974,11 +1026,7 @@ def process_subject_session(config: dict, in_root: Path):
                                 fs_dir=fs_dir,
                                 custom_annots=custom_annots if custom_annots else None,
                                 out_base=out_base,
-                                bold_img=(
-                                    ctx["bold_path"]
-                                    if analysis_space == "volume"
-                                    else None
-                                ),
+                                bold_img=ctx.get("bold_path"),
                             )
                             LOG.debug(
                                 f"ROI cache ready (key={getattr(roi_pack, 'key', 'n/a')}, file={getattr(roi_pack, 'h5_path', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
@@ -1001,15 +1049,21 @@ def process_subject_session(config: dict, in_root: Path):
                             LOG.error(
                                 f"Averaging failed for sub-{sub} ses-{ses or 'NA'} task-{task} ({e})"
                             )
-                            raise
+                            if not continue_on_error:
+                                ctx.pop("run", None)
+                                raise
 
-                        del ctx["run"]
-                    del ctx["hemi"]
-                del ctx["task"]
-                del ctx["func_out"]
-                del ctx["stim_out"]
-            del ctx["ses"]
-        del ctx["sub"]
+                        ctx.pop("run", None)
+                        ctx.pop("bold_path", None)
+                    # clear per-run keys in case a run skipped or averaging did not run
+                    ctx.pop("run", None)
+                    ctx.pop("bold_path", None)
+                    ctx.pop("hemi", None)
+                ctx.pop("task", None)
+                ctx.pop("func_out", None)
+                ctx.pop("stim_out", None)
+            ctx.pop("ses", None)
+        ctx.pop("sub", None)
 
     # copy the dataset_description from fmriprep
     LOG.debug("Copying dataset_description.json to output…")
