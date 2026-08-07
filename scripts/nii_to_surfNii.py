@@ -136,13 +136,29 @@ def apply_masks_to_run(
         # Select correct grid (surface clears selection; volume picks grid by shape+affine)
         try:
             roi_pack.select_grid_for_input(img)
-        except Exception:
+        except Exception as e:
             # If selection fails (legacy file), proceed with legacy union computation
-            pass
+            LOG.warning(
+                f"Grid selection failed for {in_path} ({type(e).__name__}: {e}); "
+                "falling back to the currently selected grid."
+            )
 
         # Use union index; fallback only if union group missing
         u = roi_pack.get_masked_space_flat_index(hemi=hemi)
         flat = data.reshape(-1, data.shape[-1])
+
+        # The index comes from the ROI pack, the data from fMRIPrep. If they
+        # describe different surfaces, report which rather than letting the fancy
+        # index raise a bare IndexError.
+        if u.size and int(u.max()) >= flat.shape[0]:
+            raise ValueError(
+                f"ROI mask does not match the BOLD data for hemisphere {hemi}: "
+                f"the ROI pack indexes up to position {int(u.max())}, but the BOLD has "
+                f"only {flat.shape[0]} positions ({in_path}). The cached ROI pack is "
+                "likely stale relative to the current surfaces -- re-run with force to "
+                "rebuild it."
+            )
+
         masked = flat[u].astype(np.float32)
 
         newNii = nib.Nifti2Image(masked[:, None, None, :], affine=np.eye(4))

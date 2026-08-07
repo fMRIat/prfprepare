@@ -41,7 +41,7 @@ class GridMismatchError(ValueError):
 # Atlas names
 ATLAS_WANG = "wang"
 ATLAS_BENSON = "benson"
-ATLAS_FULLBRAIN = "fullBrain"
+ATLAS_FULLBRAIN = "full_brain"
 ATLAS_FS_CUSTOM = "fs_custom"
 ATLAS_NIFTI_CUSTOM = "nifti_custom"
 
@@ -64,6 +64,19 @@ ATLAS_FILES = {
     ATLAS_WANG: "wang15_mplbl.mgz",
     ATLAS_BENSON: "benson14_varea.mgz",
 }
+
+# Alternative surface filenames per atlas. Neuropythy writes the full-probability
+# labels (wang15_fplbl) for fsaverage but the maximum-probability labels
+# (wang15_mplbl) for individual subjects, so vertex-count checks must probe both.
+ATLAS_FILE_VARIANTS = {
+    ATLAS_WANG: ("wang15_mplbl.mgz", "wang15_fplbl.mgz"),
+    ATLAS_BENSON: ("benson14_varea.mgz",),
+}
+
+# Canonical vertex count per hemisphere for the fsaverage surface. Guards against
+# a lower-density BOLD (fsaverage6 = 40962, fsaverage5 = 10242) being processed as
+# if it were fsaverage, which the hardcoded 'space-fsaverage' filename allows.
+FSAVERAGE_N_VERTICES = 163842
 
 ATLAS_VOLUME_FILES = {
     ATLAS_WANG: "wang15_mplbl.mgz",
@@ -94,16 +107,28 @@ def _validate_inputs(
 
 
 def _canonical_meta(
-    sub: str, analysis_space: str, atlases, rois, fs_dir: Path | str
+    sub: str,
+    analysis_space: str,
+    atlases,
+    rois,
+    fs_dir: Path | str,
+    vertex_counts: Optional[dict] = None,
 ) -> dict:
-    """Canonicalize meta for a stable key (order-insensitive for atlases/rois)."""
-    return {
+    """Canonicalize meta for a stable key (order-insensitive for atlases/rois).
+
+    ``vertex_counts`` participates in the key so that regenerating the FreeSurfer
+    surfaces invalidates a cached ROI pack whose indices describe the old surface.
+    """
+    meta = {
         "sub": sub,
         "analysis_space": str(analysis_space),
         "atlases": sorted(list(atlases or [])),
         "rois": sorted(list(rois or [])),
         "fs_dir": str(fs_dir),
     }
+    if vertex_counts:
+        meta["vertex_counts"] = {k: int(v) for k, v in sorted(vertex_counts.items())}
+    return meta
 
 
 def _meta_digest(meta_dict: dict) -> str:
@@ -234,14 +259,19 @@ def _write_union_membership(f: h5py.File, rois: dict, base_group: str | None = N
         # deterministic ordering
         items.sort(key=lambda x: (x[0][1], x[0][2], x[0][0]))
 
-        # shape consistency (for volume)
-        if grid_order == "C":
-            shape0 = items[0][1].shape
-            for _, m in items:
-                if m.shape != shape0:
-                    raise GridMismatchError(
-                        f"Volume shape mismatch for hemi {hemi_label}: {m.shape} vs {shape0}"
-                    )
+        # Shape consistency. Required for both grids: mismatched surface masks
+        # otherwise reach np.stack as a bare ValueError, or -- when the union is
+        # built from the shorter mask -- index out of bounds in g2m below.
+        key0, mask0 = items[0]
+        for (h, a, r), m in items:
+            if m.shape != mask0.shape:
+                kind = "Volume" if grid_order == "C" else "Surface"
+                raise GridMismatchError(
+                    f"{kind} shape mismatch for hemi {hemi_label}: "
+                    f"atlas '{a}' roi '{r}' has shape {m.shape}, but "
+                    f"atlas '{key0[1]}' roi '{key0[2]}' has shape {mask0.shape}. "
+                    "All masks for a hemisphere must describe the same grid."
+                )
 
         # Compute masked space over this hemisphere
         stack = np.stack([m for _, m in items], axis=0)
@@ -300,7 +330,7 @@ def _write_union_membership(f: h5py.File, rois: dict, base_group: str | None = N
 
     # Process volume items (handle 'both' masks by duplicating into l/r)
     if vol_items:
-        # If a 'both' mask exists (e.g., fullBrain), duplicate into l and r sets
+        # If a 'both' mask exists (e.g., full_brain), duplicate into l and r sets
         both_masks = vol_items.get(HEMI_BOTH, [])
         if both_masks:
             for hemi_label in (HEMI_LEFT, HEMI_RIGHT):
@@ -523,6 +553,14 @@ def _resolve_fs_subject_dir(
     pattern = fs_dir / f"sub-{sub}_ses-*"
     matches = sorted(pattern.parent.glob(pattern.name))
     if matches:
+        if len(matches) > 1:
+            # Per-session recon-all produces different vertex counts per session,
+            # so an arbitrary pick here silently changes the surface being used.
+            get_logger(__file__).warning(
+                f"Multiple FreeSurfer session directories for sub-{sub} "
+                f"(session {sess!r} did not resolve): "
+                f"{', '.join(m.name for m in matches)}. Using {matches[0].name}."
+            )
         return matches[0]
 
     # Return old path as default (will fail later if doesn't exist)
@@ -547,30 +585,211 @@ def _build_atlas_path(
     return Path(fs_dir) / sub_path / "surf" / f"{hemi}h.{atlas_file}"
 
 
+def _surface_subject_dir(
+    fs_dir: Path | str, sub: str, analysis_space: str, sess: str | None = None
+) -> Path:
+    """Resolve the FreeSurfer directory holding surfaces for this analysis space."""
+    fs_dir = Path(fs_dir)
+    if analysis_space == SPACE_FSNATIVE:
+        return _resolve_fs_subject_dir(fs_dir, sub, sess)
+    return fs_dir / "fsaverage"
+
+
+def _geometry_vertex_count(sub_dir: Path, hemi: str) -> tuple[int, Path]:
+    """Vertex count from FreeSurfer surface geometry (the authoritative source)."""
+    tried = []
+    for surf in ("white", "orig", "pial"):
+        path = sub_dir / "surf" / f"{hemi}h.{surf}"
+        tried.append(path)
+        if path.exists():
+            coords, _ = nib.freesurfer.read_geometry(str(path))
+            return int(coords.shape[0]), path
+
+    raise AtlasNotFoundError(
+        f"No FreeSurfer surface geometry found for hemisphere {hemi}. Tried: "
+        + ", ".join(str(p) for p in tried)
+    )
+
+
+def _atlas_vertex_count(path: Path) -> int:
+    """
+    Vertex count of a surface atlas overlay.
+
+    Maximum-probability labels (wang15_mplbl, benson14_varea) squeeze to a plain
+    (vertices,) vector, but the full-probability labels (wang15_fplbl) squeeze to
+    (n_areas, vertices) -- one probability map per visual area. Taking the largest
+    axis reads the vertex count from either, since the number of visual areas is
+    orders of magnitude smaller than the number of vertices.
+    """
+    shape = nib.load(str(path)).get_fdata().squeeze().shape
+    return int(max(shape))
+
+
+def _bold_vertex_count(
+    bold_img, hemi: str, bold_hemi: Optional[str] = None
+) -> Optional[tuple[int, str]]:
+    """
+    Vertex count from a surface BOLD GIFTI, or None if it says nothing about `hemi`.
+
+    A BOLD only constrains the hemisphere it actually belongs to. That hemisphere
+    comes from ``bold_hemi`` when the caller knows it (authoritative, and the only
+    option for in-memory images such as an averaged run), otherwise from the
+    filename. An image we cannot attribute to a hemisphere is skipped rather than
+    compared against both -- comparing both would fail whichever hemisphere it is
+    not, and the bounds check in nii_to_surfNii still guards the masking itself.
+    """
+    if bold_img is None:
+        return None
+
+    try:
+        if bold_hemi is not None:
+            if str(bold_hemi).lower() != hemi:
+                return None
+        elif isinstance(bold_img, (str, Path)):
+            # Only the matching hemisphere's file describes this hemi's surface.
+            if f"hemi-{hemi.upper()}" not in Path(str(bold_img)).name:
+                return None
+        else:
+            # In-memory image with no declared hemisphere: not attributable.
+            return None
+
+        if isinstance(bold_img, (str, Path)):
+            path = str(bold_img)
+            img = nib.load(path)
+        else:
+            img = bold_img
+            path = (
+                getattr(img, "get_filename", lambda: None)()
+                or "<in-memory averaged run>"
+            )
+
+        # Volume inputs have no vertex count to compare against.
+        if not hasattr(img, "agg_data"):
+            return None
+
+        # fMRIPrep writes one darray per timepoint, each holding all vertices, and
+        # agg_data stacks them as (vertices, timepoints) -- matching the axis that
+        # nii_to_surfNii indexes. Read the vertex count from a single darray so we
+        # do not depend on how agg_data orients the stack.
+        darrays = getattr(img, "darrays", None)
+        if darrays:
+            return int(np.asarray(darrays[0].data).shape[0]), path
+
+        return int(np.asarray(img.agg_data()).shape[0]), path
+    except AtlasNotFoundError:
+        raise
+    except Exception:
+        # A BOLD we cannot read is not evidence of a mismatch; the per-run bounds
+        # check in nii_to_surfNii still guards the actual masking step.
+        return None
+
+
+def _validate_surface_vertex_counts(
+    fs_dir: Path | str,
+    sub: str,
+    analysis_space: str,
+    atlases: Iterable[str],
+    sess: str | None = None,
+    bold_img=None,
+    bold_hemi: Optional[str] = None,
+    LOG=None,
+) -> dict:
+    """
+    Check that every source of vertex counts agrees, before any mask is built.
+
+    Three independent sources must describe the same surface:
+      1. FreeSurfer geometry (?h.white) -- authoritative
+      2. neuropythy atlas overlays (wang, benson)
+      3. the fMRIPrep BOLD GIFTI being masked
+
+    They agree by construction; a disagreement means the inputs are inconsistent
+    (commonly a re-run recon-all against stale neuropythy output) and any result
+    would be silently wrong. Sources whose files are absent are skipped -- that is
+    handled separately as AtlasNotFoundError when the atlas is actually loaded.
+
+    Returns
+    -------
+    dict
+        Per-hemisphere vertex counts, e.g. ``{"l": 149623, "r": 150894}``.
+
+    Raises
+    ------
+    GridMismatchError
+        If the present sources disagree, or if an fsaverage surface is not the
+        canonical density.
+    """
+    fs_dir = Path(fs_dir)
+    sub_dir = _surface_subject_dir(fs_dir, sub, analysis_space, sess)
+    atlases = list(atlases or [])
+    counts = {}
+
+    for hemi in (HEMI_LEFT, HEMI_RIGHT):
+        n_geom, geom_path = _geometry_vertex_count(sub_dir, hemi)
+        sources = [("geometry", str(geom_path), n_geom)]
+
+        for atlas in atlases:
+            for fname in ATLAS_FILE_VARIANTS.get(atlas, ()):
+                path = sub_dir / "surf" / f"{hemi}h.{fname}"
+                if path.exists():
+                    n = _atlas_vertex_count(path)
+                    sources.append((f"atlas:{atlas}", str(path), n))
+
+        bold = _bold_vertex_count(bold_img, hemi, bold_hemi=bold_hemi)
+        if bold is not None:
+            sources.append(("bold", bold[1], bold[0]))
+
+        distinct = {n for _, _, n in sources}
+        if len(distinct) > 1:
+            detail = "\n".join(f"  {n:>9}  {name:<16} {path}" for name, path, n in sources)
+            raise GridMismatchError(
+                f"Vertex count mismatch for subject {sub}, hemisphere {hemi}h "
+                f"({analysis_space}):\n{detail}\n"
+                "These must all describe the same surface. This usually means the "
+                "FreeSurfer surfaces were regenerated without refreshing the neuropythy "
+                "atlases, or that a cached ROI pack is stale -- re-run with force to "
+                "rebuild."
+            )
+
+        if analysis_space == SPACE_FSAVERAGE and n_geom != FSAVERAGE_N_VERTICES:
+            raise GridMismatchError(
+                f"analysisSpace is '{SPACE_FSAVERAGE}' but the {hemi}h surface has "
+                f"{n_geom} vertices, not the expected {FSAVERAGE_N_VERTICES}. This "
+                "usually means the data is on a lower-density surface such as "
+                "fsaverage6 (40962) or fsaverage5 (10242)."
+            )
+
+        counts[hemi] = n_geom
+
+    if LOG is not None:
+        LOG.debug(
+            f"Vertex counts validated ({analysis_space}): "
+            f"lh={counts[HEMI_LEFT]}, rh={counts[HEMI_RIGHT]}"
+        )
+    return counts
+
+
 def _load_fullbrain_mask(
     fs_dir: Path | str,
     sub: str,
     hemi: str,
     analysis_space: str,
     sess: str | None = None,
+    n_vertices: Optional[int] = None,
 ) -> dict:
-    """Load fullbrain mask by inferring vertex count from existing atlas."""
-    fs_dir = Path(fs_dir)
-    if analysis_space == SPACE_FSNATIVE:
-        sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
-    else:
-        sub_dir = fs_dir / "fsaverage"
+    """
+    Build the full_brain mask: every vertex of the hemisphere.
 
-    # Try wang atlas first, then benson
-    for atlas in [ATLAS_WANG, ATLAS_BENSON]:
-        areas_path = sub_dir / "surf" / f"{hemi}h.{ATLAS_FILES[atlas]}"
-        if areas_path.exists():
-            n = int(nib.load(str(areas_path)).get_fdata().squeeze().shape[0])
-            return {(hemi, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): np.ones((n,), dtype=bool)}
+    The vertex count comes from the validated count when available, else directly
+    from the surface geometry. It is deliberately not inferred from an atlas
+    overlay, which may be absent or stale.
+    """
+    if n_vertices is None:
+        sub_dir = _surface_subject_dir(fs_dir, sub, analysis_space, sess)
+        n_vertices, _ = _geometry_vertex_count(sub_dir, hemi)
 
-    raise AtlasNotFoundError(
-        f"Could not infer vertex count from any atlas for subject {sub}, hemisphere {hemi}"
-    )
+    return {
+        (hemi, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): np.ones((n_vertices,), dtype=bool)
+    }
 
 
 def _load_atlas_data_and_labels(
@@ -716,13 +935,16 @@ def _surface_masks_for_atlas(
     analysis_space: str,
     sess: str | None = None,
     verbose: bool = False,
+    n_vertices: Optional[int] = None,
 ) -> dict:
     """
     Return dict of boolean masks keyed by (hemi, atlas, roi) for surface spaces.
     """
     try:
         if atlas == ATLAS_FULLBRAIN:
-            return _load_fullbrain_mask(fs_dir, sub, hemi, analysis_space, sess)
+            return _load_fullbrain_mask(
+                fs_dir, sub, hemi, analysis_space, sess, n_vertices=n_vertices
+            )
 
         elif atlas in [ATLAS_BENSON, ATLAS_WANG]:
             areas, labels = _load_atlas_data_and_labels(
@@ -898,7 +1120,7 @@ def _volume_masks_for_atlas(
 ) -> dict:
     """
     Return dict of boolean 3D masks in T1w space keyed by (hemi, atlas, roi),
-    or ('both','fullBrain','fullBrain') for volume-wide masks.
+    or ('both','full_brain','full_brain') for volume-wide masks.
     """
     fs_dir = Path(fs_dir)
     sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
@@ -916,9 +1138,31 @@ def _volume_masks_for_atlas(
     rh_ribbon_img = nib.load(str(rh_ribbon_path))
 
     if atlas == ATLAS_FULLBRAIN:
+        # Resample the ribbon to the BOLD grid so the flat indices are in BOLD
+        # voxel order and stay shape-consistent with wang/benson masks in the
+        # union (otherwise apply_masks_to_run indexes the wrong grid and
+        # _write_union_membership raises GridMismatchError).
+        if resample and bold_img is not None:
+            if isinstance(bold_img, (str, Path)):
+                bold_img = nib.load(str(bold_img))
+            target_shape = bold_img.shape[:-1]
+            if lh_ribbon_img.shape != target_shape:
+                lh_ribbon_img = resample_to_img(
+                    lh_ribbon_img,
+                    bold_img,
+                    interpolation="nearest",
+                    force_resample=True,
+                )
+            if rh_ribbon_img.shape != target_shape:
+                rh_ribbon_img = resample_to_img(
+                    rh_ribbon_img,
+                    bold_img,
+                    interpolation="nearest",
+                    force_resample=True,
+                )
         lh_ribbon = lh_ribbon_img.get_fdata().astype(bool)
         rh_ribbon = rh_ribbon_img.get_fdata().astype(bool)
-        # Store separate per-hemi fullBrain masks for per-hemi unions
+        # Store separate per-hemi full_brain masks for per-hemi unions
         return {
             (HEMI_LEFT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): lh_ribbon,
             (HEMI_RIGHT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): rh_ribbon,
@@ -953,7 +1197,7 @@ def _volume_masks_for_atlas(
 
         dilate = False  # Assume already preprocessed
     else:
-        # Volume supports only benson/wang/fullBrain/custom
+        # Volume supports only benson/wang/full_brain/custom
         raise UnsupportedAtlasError(
             f"Atlas '{atlas}' not supported in volume space. Use: {ATLAS_BENSON}, {ATLAS_WANG}, {ATLAS_FULLBRAIN}, or custom NIfTI"
         )
@@ -1009,7 +1253,8 @@ def _run_neuropythy(
 
     # Subject-level Benson maps
     subj_benson = fs_dir / subject / "mri" / "benson14_varea.mgz"
-    if not subj_benson.exists():
+    subj_wang_rh = fs_dir / subject / "surf" / "rh.wang15_mplbl.mgz"
+    if not subj_benson.exists() or not subj_wang_rh.exists():
         LOG = LOG or get_logger(__file__)
         LOG.debug(f"Neuropythy: generating Benson maps for {subject}...")
         try:
@@ -1113,25 +1358,71 @@ def prepare_roi_pack(
     h5_path = out_dir / "all_roi_masks.h5"
     meta_path = out_dir / "all_roi_masks_meta.json"
 
+    # Validate that geometry, atlases and BOLD agree on vertex counts before any
+    # mask is built. Runs ahead of the cache check so a stale pack is caught
+    # rather than served.
+    vertex_counts = None
+    if analysis_space in (SPACE_FSNATIVE, SPACE_FSAVERAGE):
+        vertex_counts = _validate_surface_vertex_counts(
+            fs_dir,
+            sub,
+            analysis_space,
+            atlases,
+            sess=ses,
+            bold_img=bold_img,
+            # The caller knows which hemisphere this BOLD is; an averaged run is an
+            # in-memory image whose hemisphere cannot be read from a filename.
+            bold_hemi=ctx.get("hemi"),
+            LOG=LOG,
+        )
+
     # Canonical meta + key
-    meta_canon = _canonical_meta(sub, analysis_space, atlases, rois, fs_dir)
+    meta_canon = _canonical_meta(
+        sub, analysis_space, atlases, rois, fs_dir, vertex_counts=vertex_counts
+    )
     key = _meta_digest(meta_canon)
     meta = dict(meta_canon)
     meta["key"] = key
 
-    # If cache exists and not forcing, refresh meta JSON and, for surface spaces, reuse immediately.
+    # If cache exists and not forcing, reuse it -- but only when it describes the
+    # same inputs. The stored key covers the vertex counts, so a cache built
+    # against different surfaces is rebuilt instead of producing indices that no
+    # longer match the data.
     if h5_path.exists() and not force:
+        cached_key = None
         if meta_path.exists():
             try:
-                m = json.loads(meta_path.read_text())
+                cached_key = json.loads(meta_path.read_text()).get("key")
             except Exception:
-                m = meta
-            if "key" not in m:
-                m["key"] = key
-            meta = m
-        meta_path.write_text(json.dumps(meta, indent=2))
+                cached_key = None
+
         if analysis_space in ("fsnative", "fsaverage"):
-            return RoiPack(key, h5_path, meta)
+            # Verify cache has flat_index datasets (added in newer schema); rebuild if missing
+            try:
+                with h5py.File(str(h5_path), "r") as _f:
+                    _has_flat = (
+                        "masked_space/flat_index_l" in _f
+                        and "masked_space/flat_index_r" in _f
+                    )
+            except Exception:
+                _has_flat = False
+
+            if not _has_flat:
+                LOG.info(
+                    "ROI cache missing flat_index datasets (old schema); rebuilding…"
+                )
+            elif cached_key is None:
+                LOG.info("ROI cache has no stored key; rebuilding…")
+            elif cached_key != key:
+                LOG.info(
+                    f"ROI cache key mismatch (cached={cached_key}, expected={key}); "
+                    "inputs or surface geometry changed, rebuilding…"
+                )
+            else:
+                meta_path.write_text(json.dumps(meta, indent=2))
+                return RoiPack(key, h5_path, meta)
+        else:
+            meta_path.write_text(json.dumps(meta, indent=2))
 
     # Compute ROI masks
     roi_masks = {}
@@ -1151,6 +1442,7 @@ def prepare_roi_pack(
                         analysis_space,
                         sess=ses,
                         verbose=verbose,
+                        n_vertices=(vertex_counts or {}).get(hemi),
                     )
                 )
         # Persist surface under root
