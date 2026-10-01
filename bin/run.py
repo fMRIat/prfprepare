@@ -315,6 +315,11 @@ def _average_runs_bold(bold_paths, LOG):
                 raise ValueError(
                     "All BOLD files must have the same spatial dimensions for averaging"
                 )
+            elif not np.allclose(img.affine, imgs[0].affine, atol=1e-5):
+                raise ValueError(
+                    "All BOLD files must share the same voxel grid (affine) for "
+                    f"averaging; {bold_paths[len(datas)]} differs from {bold_paths[0]}"
+                )
             datas.append(d)
             Ts.append(d.shape[-1])
 

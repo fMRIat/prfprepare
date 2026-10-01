@@ -968,12 +968,17 @@ def _surface_masks_for_atlas(
         return {}
 
 
+def _same_grid(img, bold_img, atol=1e-5) -> bool:
+    """True if img already lies on the BOLD voxel grid (same shape and affine)."""
+    return img.shape[:3] == bold_img.shape[:3] and np.allclose(
+        img.affine, bold_img.affine, atol=atol
+    )
+
+
 def _resample_images_to_bold(atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_img):
     """Resample atlas and ribbon images to BOLD space if needed."""
-    target_shape = bold_img.shape[:-1]
-
     # Resample atlas volume
-    if atlas_vol_img.shape != target_shape:
+    if not _same_grid(atlas_vol_img, bold_img):
         atlas_vol_img = resample_to_img(
             atlas_vol_img,
             bold_img,
@@ -982,7 +987,7 @@ def _resample_images_to_bold(atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_i
         )
 
     # Resample left hemisphere ribbon
-    if lh_ribbon_img.shape != target_shape:
+    if not _same_grid(lh_ribbon_img, bold_img):
         lh_ribbon_img = resample_to_img(
             lh_ribbon_img,
             bold_img,
@@ -991,7 +996,7 @@ def _resample_images_to_bold(atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_i
         )
 
     # Resample right hemisphere ribbon
-    if rh_ribbon_img.shape != target_shape:
+    if not _same_grid(rh_ribbon_img, bold_img):
         rh_ribbon_img = resample_to_img(
             rh_ribbon_img,
             bold_img,
@@ -1145,15 +1150,14 @@ def _volume_masks_for_atlas(
         if resample and bold_img is not None:
             if isinstance(bold_img, (str, Path)):
                 bold_img = nib.load(str(bold_img))
-            target_shape = bold_img.shape[:-1]
-            if lh_ribbon_img.shape != target_shape:
+            if not _same_grid(lh_ribbon_img, bold_img):
                 lh_ribbon_img = resample_to_img(
                     lh_ribbon_img,
                     bold_img,
                     interpolation="nearest",
                     force_resample=True,
                 )
-            if rh_ribbon_img.shape != target_shape:
+            if not _same_grid(rh_ribbon_img, bold_img):
                 rh_ribbon_img = resample_to_img(
                     rh_ribbon_img,
                     bold_img,

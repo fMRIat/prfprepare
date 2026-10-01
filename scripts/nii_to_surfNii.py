@@ -133,6 +133,14 @@ def apply_masks_to_run(
                 f"start_scan={getattr(stim, 'start_scan', 0.0):.3f}s, removing first {start_scan} volumes; new shape: {data.shape}"
             )
 
+        # Log the voxel grid so runs/sessions landing on different grids are visible
+        if hasattr(img, "affine") and data.ndim == 4:
+            LOG.info(
+                f"BOLD grid: shape={data.shape[:3]}, "
+                f"zooms={tuple(np.round(img.header.get_zooms()[:3], 3))}, "
+                f"origin={tuple(np.round(img.affine[:3, 3], 3))}"
+            )
+
         # Select correct grid (surface clears selection; volume picks grid by shape+affine)
         try:
             roi_pack.select_grid_for_input(img)
