@@ -919,7 +919,7 @@ def _create_roi_masks(
 
     # Create masks for each ROI
     for roi in rois_eff:
-        roi_labels = [v for k, v in labels.items() if roi in k]
+        roi_labels = [v for k, v in labels.items() if _roi_matches(roi, k)]
         if not roi_labels:
             continue
         mask = np.any([areas == lab for lab in roi_labels], axis=0)
@@ -1112,6 +1112,29 @@ def _dilate_atlas_with_distance_assignment(atlas_base, unique_labels):
     return atlas
 
 
+def _roi_matches(roi: str, label: str) -> bool:
+    """Whether atlas label ``label`` belongs to the requested ROI ``roi``.
+
+    The label itself, or its dorsal/ventral half (Wang's V1d/V1v for "V1").
+    Not a substring match: that put Benson's V3a and V3b into V3.
+    """
+    return label == roi or (label[:-1] == roi and label[-1:] in ("d", "v"))
+
+
+def _left_hemisphere_territory(lh_ribbon, rh_ribbon):
+    """Boolean map of the voxels that belong to the left hemisphere.
+
+    A voxel is left when it is at least as close to the left cortical ribbon as
+    to the right one, so ribbon voxels keep their own hemisphere and everything
+    else goes to the nearer one.
+    """
+    from scipy.ndimage import distance_transform_edt
+
+    d_l = distance_transform_edt(~np.asarray(lh_ribbon, bool))
+    d_r = distance_transform_edt(~np.asarray(rh_ribbon, bool))
+    return d_l <= d_r
+
+
 def _create_volume_roi_masks(
     atlas_vol,
     lh_ribbon,
@@ -1139,6 +1162,15 @@ def _create_volume_roi_masks(
         atlas_l = atlas_vol * lh_ribbon
         atlas_r = atlas_vol * rh_ribbon
 
+    # A voxel belongs to one hemisphere only. Dilation grows each hemisphere's
+    # labels independently, so at the midline both can claim the same voxel,
+    # which then lands in both hemispheres' masked spaces and is fitted twice.
+    # Give every voxel to the hemisphere whose cortical ribbon is closer (ties
+    # go left). Being one map per grid, it splits all atlases the same way.
+    left = _left_hemisphere_territory(lh_ribbon, rh_ribbon)
+    atlas_l = np.where(left, atlas_l, 0)
+    atlas_r = np.where(left, 0, atlas_r)
+
     # Determine effective ROIs
     if rois and list(rois)[0] == ROI_ALL:
         rois_eff = (
@@ -1151,8 +1183,8 @@ def _create_volume_roi_masks(
 
     masks = {}
     for roi in rois_eff:
-        roi_labels_l = [v for k, v in labels_l.items() if roi in k]
-        roi_labels_r = [v for k, v in labels_r.items() if roi in k]
+        roi_labels_l = [v for k, v in labels_l.items() if _roi_matches(roi, k)]
+        roi_labels_r = [v for k, v in labels_r.items() if _roi_matches(roi, k)]
 
         if not roi_labels_l and not roi_labels_r:
             continue
@@ -1222,10 +1254,13 @@ def _volume_masks_for_atlas(
                 )
         lh_ribbon = lh_ribbon_img.get_fdata().astype(bool)
         rh_ribbon = rh_ribbon_img.get_fdata().astype(bool)
+        # FreeSurfer's two ribbons overlap at the medial wall, so split them the
+        # same way as the atlases: each voxel to one hemisphere only
+        left = _left_hemisphere_territory(lh_ribbon, rh_ribbon)
         # Store separate per-hemi full_brain masks for per-hemi unions
         return {
-            (HEMI_LEFT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): lh_ribbon,
-            (HEMI_RIGHT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): rh_ribbon,
+            (HEMI_LEFT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): lh_ribbon & left,
+            (HEMI_RIGHT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): rh_ribbon & ~left,
         }
 
     # Handle Benson and Wang atlases
