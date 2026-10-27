@@ -211,6 +211,62 @@ def _release_lock(lock_path: Path, LOG=None):
         pass
 
 
+def _write_meta(meta_path: Path, meta: dict):
+    """Write the meta JSON, keeping the grid provenance already on disk.
+
+    ``meta`` is rebuilt from the inputs on every call and has no 'grids' block,
+    so writing it as-is would drop what earlier runs recorded. Provenance is
+    descriptive only and deliberately not part of the key.
+
+    Written to a temp file and renamed, so a reader never sees half a file.
+    """
+    out = dict(meta)
+    if "grids" not in out and meta_path.exists():
+        try:
+            grids = json.loads(meta_path.read_text()).get("grids")
+            if grids:
+                out["grids"] = grids
+        except Exception:
+            pass
+    tmp = meta_path.with_name(f"{meta_path.name}.tmp{os.getpid()}")
+    tmp.write_text(json.dumps(out, indent=2))
+    os.replace(tmp, meta_path)
+
+
+def _merge_grid_provenance(meta_path: Path, gid: str, bimg, ctx):
+    """Add this run to its grid's entry in the meta JSON.
+
+    A grid is identified by (shape, affine), so many runs share one, and runs
+    with a different shape or affine land on separate grids in the same
+    per-subject pack. The 'runs' list ("ses-X_task-Y_run-Z") is what lets a
+    reader map its own run to its grid.
+
+    The list is unioned rather than overwritten. Concurrent jobs on one subject
+    can lose an entry here; that only makes a reader fall back to matching the
+    grid by voxel count, never pick a wrong grid.
+    """
+    try:
+        meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    except Exception:
+        meta = {}
+    name = "_".join(
+        f"{prefix}-{ctx[key]}"
+        for prefix, key in (("ses", "ses"), ("task", "task"), ("run", "run"))
+        if ctx.get(key) is not None
+    )
+    grids = meta.setdefault("grids", {})
+    # A run is on exactly one grid. If its geometry changed since the last
+    # prfprepare (e.g. fMRIPrep rerun), drop it from the grid it used to be on.
+    for other in grids.values():
+        if name in other.get("runs", []):
+            other["runs"].remove(name)
+    entry = grids.setdefault(gid, {})
+    entry["runs"] = sorted(set(entry.get("runs", [])) | {name})
+    entry["shape"] = [int(v) for v in bimg.shape[:3]]
+    entry["affine"] = np.asarray(bimg.affine, float).round(6).tolist()
+    _write_meta(meta_path, meta)
+
+
 def _write_union_membership(f: h5py.File, rois: dict, base_group: str | None = None):
     """
     Build masked space membership structures for both volume (3D) and surface (1D) ROI masks.
@@ -1423,10 +1479,10 @@ def prepare_roi_pack(
                     "inputs or surface geometry changed, rebuilding…"
                 )
             else:
-                meta_path.write_text(json.dumps(meta, indent=2))
+                _write_meta(meta_path, meta)
                 return RoiPack(key, h5_path, meta)
         else:
-            meta_path.write_text(json.dumps(meta, indent=2))
+            _write_meta(meta_path, meta)
 
     # Compute ROI masks
     roi_masks = {}
@@ -1457,7 +1513,7 @@ def prepare_roi_pack(
             key,
             base_group=None,
         )
-        meta_path.write_text(json.dumps(meta, indent=2))
+        _write_meta(meta_path, meta)
         return RoiPack(key, h5_path, meta)
     elif analysis_space == SPACE_VOLUME:
         if bold_img is None:
@@ -1471,6 +1527,14 @@ def prepare_roi_pack(
             bimg = bold_img
         gid = _grid_signature(bimg.shape[:3], bimg.affine)
         base_group = f"grids/{gid}"
+
+        # Record this run against its grid before the early return below: only
+        # the first run of a grid gets past it, so recording later would list
+        # one run per grid instead of all of them.
+        try:
+            _merge_grid_provenance(meta_path, gid, bimg, ctx)
+        except Exception as e:
+            LOG.warning(f"Could not record grid provenance in {meta_path}: {e}")
 
         # If grid exists and not forcing, reuse
         if h5_path.exists() and not force:
@@ -1532,7 +1596,7 @@ def prepare_roi_pack(
         except Exception as e:
             LOG.error(f"Failed to write ROI pack to {h5_path}: {e}")
             raise e
-        meta_path.write_text(json.dumps(meta, indent=2))
+        _write_meta(meta_path, meta)
         return RoiPack(key, h5_path, meta)
     else:
         raise ValueError(
