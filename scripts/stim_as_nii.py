@@ -34,6 +34,43 @@ def _infer_output_name(task: Optional[str]) -> str:
     return f"task-{task}_apertures.nii.gz"
 
 
+def _background_value(images: np.ndarray, src: np.ndarray):
+    """Most frequent pixel value of images[:, :, src], ties to the smaller value.
+
+    Same as ``a[np.argmax(c)]`` with ``a, c = np.unique(images[:, :, src],
+    return_counts=True)``, without building and sorting that array: src
+    repeats a limited set of frames, so each frame is counted once and
+    weighted by how often src uses it.
+    """
+    n_frames = images.shape[2]
+    weights = np.bincount(src, minlength=n_frames).astype(np.int64)
+    if images.dtype == bool:
+        lo, hi = 0, 1
+    elif images.dtype == np.uint8:
+        lo, hi = 0, 255
+    elif np.issubdtype(images.dtype, np.integer):
+        # values only in unused frames get weight 0, so the range may be wide
+        lo, hi = int(images.min()), int(images.max())
+    else:
+        lo = hi = None
+    if lo is None or (hi - lo + 1) * n_frames > 50_000_000:
+        a, a_count = np.unique(images[:, :, src], return_counts=True)
+        return a[np.argmax(a_count)]
+
+    # counts[value, frame] in one bincount per block of contiguous rows
+    n_vals = hi - lo + 1
+    frame = np.arange(n_frames, dtype=np.int64)
+    counts = np.zeros(n_vals * n_frames, dtype=np.int64)
+    rows = max(1, 8_000_000 // max(1, images.shape[1] * n_frames))
+    for r0 in range(0, images.shape[0], rows):
+        block = images[r0 : r0 + rows].astype(np.int64)
+        counts += np.bincount(
+            ((block - lo) * n_frames + frame).ravel(), minlength=counts.size
+        )
+    counts = counts.reshape(n_vals, n_frames) @ weights
+    return images.dtype.type(lo + int(np.argmax(counts)))
+
+
 def generate_aperture_nii(
     ctx: dict,
     stim,
@@ -174,18 +211,18 @@ def generate_aperture_nii(
             frame_tr = getattr(stim, "seqtiming", None)
             if frame_tr is not None and frame_tr > 0:
                 LOG.debug("Output all frames mode: using native frame timing...")
-                picked_images = images[:, :, seq]
+                src = np.asarray(seq)
 
                 # Drop prescan frames if applicable
                 if prescan > 0:
                     n_drop = int(round(prescan / frame_tr))
-                    if n_drop >= picked_images.shape[-1]:
+                    if n_drop >= src.shape[-1]:
                         raise ValueError(
-                            f"Prescan removal would drop all frames: prescan={prescan}, seqtiming={frame_tr}, T={picked_images.shape[-1]}."
+                            f"Prescan removal would drop all frames: prescan={prescan}, seqtiming={frame_tr}, T={src.shape[-1]}."
                         )
-                    picked_images = picked_images[:, :, n_drop:]
+                    src = src[n_drop:]
                     LOG.debug(
-                        f"Full-frames mode: Prescan={prescan:.3f}s, removing first {n_drop} frames; new shape: {picked_images.shape}",
+                        f"Full-frames mode: Prescan={prescan:.3f}s, removing first {n_drop} frames; new shape: {images.shape[:2] + src.shape}",
                     )
 
                 effective_tr = frame_tr
@@ -193,47 +230,49 @@ def generate_aperture_nii(
                 LOG.warn(
                     "output_all_frames=True but seqtiming unavailable; falling back to TR-sampled"
                 )
-                picked_images = images[:, :, seq[idx]]
+                src = np.asarray(seq)[idx]
                 if prescan > 0:
                     n_drop = int(round(prescan / tr))
-                    if n_drop >= picked_images.shape[-1]:
+                    if n_drop >= src.shape[-1]:
                         raise ValueError(
-                            f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={picked_images.shape[-1]}."
+                            f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={src.shape[-1]}."
                         )
-                    picked_images = picked_images[:, :, n_drop:]
+                    src = src[n_drop:]
                     LOG.debug(
-                        f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {picked_images.shape}",
+                        f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {images.shape[:2] + src.shape}",
                     )
                 effective_tr = tr
         else:
             # Normal TR-sampled output
             LOG.debug("Constructing apertures from frames...")
-            picked_images = images[:, :, seq[idx]]
+            src = np.asarray(seq)[idx]
 
             if prescan > 0:
                 n_drop = int(round(prescan / tr))
-                if n_drop >= picked_images.shape[-1]:
+                if n_drop >= src.shape[-1]:
                     raise ValueError(
-                        f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={picked_images.shape[-1]}."
+                        f"Prescan removal would drop all frames: prescan={prescan}, tr={tr}, T={src.shape[-1]}."
                     )
-                picked_images = picked_images[:, :, n_drop:]
+                src = src[n_drop:]
                 LOG.debug(
-                    f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {picked_images.shape}",
+                    f"Prescan={prescan:.3f}, removing first {n_drop} volumes; new shape: {images.shape[:2] + src.shape}",
                 )
             effective_tr = tr
 
-        # Binarize → uint8 apertures, reshape to (H, W, 1, T)
-        H, W, T = picked_images.shape
-        a, a_count = np.unique(picked_images, return_counts=True)
-        apertures = (picked_images != a[np.argmax(a_count)]).astype(np.uint8)
-        apertures = apertures.reshape(H, W, 1, T)
-
+        # Binarize → uint8 apertures, reshape to (H, W, 1, T). Binarizing and
+        # flipping act per frame, so they run on the distinct frames before
+        # src repeats them into the full time series.
+        H, W = images.shape[:2]
+        T = src.shape[-1]
+        frames = (images != _background_value(images, src)).astype(np.uint8)
         if flip_ud:
-            apertures = np.flip(apertures, axis=0).copy()
+            frames = np.flip(frames, axis=0)
         if flip_lr:
-            apertures = np.flip(apertures, axis=1).copy()
+            frames = np.flip(frames, axis=1)
         if flip_ud or flip_lr:
             LOG.debug(f"Applied stimulus flips: flip_ud={flip_ud}, flip_lr={flip_lr}")
+        apertures = frames[:, :, src].reshape(H, W, 1, T)
+        del frames
 
         # Write NIfTI
         affine = np.eye(4, dtype=np.float32)
