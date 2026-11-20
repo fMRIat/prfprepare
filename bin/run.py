@@ -790,6 +790,36 @@ def _str2list(s):
     return out
 
 
+def _match_runs(cfg_runs, bids_runs):
+    """Map configured runs to BIDS run labels, ignoring zero padding.
+
+    pybids returns runs as padded labels (str gives "01"), while a config may
+    say 1, "1" or "01". Runs are compared by number, and the BIDS label is used
+    so that file names match the data.
+
+    Returns
+    -------
+    tuple[list[str], list]
+        The run labels (as given when not in BIDS) and the configured runs
+        not found in BIDS.
+    """
+
+    def _key(r):
+        s = str(r).strip()
+        return int(s) if s.isdigit() else s
+
+    by_key = {_key(b): b for b in bids_runs}
+    runs, missing = [], []
+    for c in cfg_runs:
+        b = by_key.get(_key(c))
+        if b is None:
+            missing.append(c)
+            runs.append(str(c).strip())
+        else:
+            runs.append(str(b))
+    return runs, missing
+
+
 def _config2list(c, base=None):
     """Minimal, robust normalizer for configuration values.
 
@@ -1140,14 +1170,19 @@ def process_subject_session(config: dict, in_root: Path):
                         f"Subject {sub} | Session {ses or 'NA'} | Task {task}: found {len(bids_runs)} runs"
                     )
                     cfg_runs = _config2list(config.get("runs", "all"))
-                    if cfg_runs[0] != "all" and not np.all(
-                        [a in bids_runs for a in cfg_runs]
+                    if any(
+                        isinstance(a, str) and a.strip().lower() == "all"
+                        for a in cfg_runs
                     ):
-                        LOG.warn(
-                            f"We did not find given run {cfg_runs} for subject {sub} in BIDS dir!"
-                        )
-
-                    runs = [str(a) for a in _config2list(cfg_runs, bids_runs)]
+                        runs = [str(a) for a in _config2list(cfg_runs, bids_runs)]
+                    else:
+                        # 1, "1" and "01" all select BIDS run-01; file names
+                        # then use the BIDS spelling
+                        runs, missing = _match_runs(cfg_runs, bids_runs)
+                        if missing:
+                            LOG.warn(
+                                f"We did not find given run {missing} for subject {sub} in BIDS dir!"
+                            )
 
                     try:
                         LOG.debug("Resolving stimulus and parameters…")

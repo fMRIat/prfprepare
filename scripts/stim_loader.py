@@ -358,6 +358,21 @@ def _dig(d, key, default=None):
 # ----------------------- HDF5 discovery helper -------------------------
 
 
+def _run_labels(run) -> list[str]:
+    """Spellings of a run label to look for in stimulus file names.
+
+    The label as given first, then unpadded and two-digit padded, so a
+    stimulus file named run-1 is found for BIDS run-01 and vice versa.
+    """
+    s = str(run).strip()
+    labels = [s]
+    if s.isdigit():
+        for v in (str(int(s)), f"{int(s):02d}"):
+            if v not in labels:
+                labels.append(v)
+    return labels
+
+
 def _resolve_h5_candidates(bids_root, sub, ses, task, run):
     """
     Resolve candidate HDF5 stimulus files for the given BIDS identifiers.
@@ -386,19 +401,23 @@ def _resolve_h5_candidates(bids_root, sub, ses, task, run):
         If no suitable HDF5 file is found.
     """
     root = Path(bids_root)
-    # run-scoped
+    # run-scoped (run-01 or run-1)
     if run is not None:
         cands = [
-            root
-            / "sourcedata"
-            / "stimuli"
-            / f"sub-{sub}"
-            / f"ses-{ses}"
-            / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_stim.h5",
-            root
-            / "sourcedata"
-            / "stimuli"
-            / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_stim.h5",
+            p
+            for r in _run_labels(run)
+            for p in (
+                root
+                / "sourcedata"
+                / "stimuli"
+                / f"sub-{sub}"
+                / f"ses-{ses}"
+                / f"sub-{sub}_ses-{ses}_task-{task}_run-{r}_stim.h5",
+                root
+                / "sourcedata"
+                / "stimuli"
+                / f"sub-{sub}_ses-{ses}_task-{task}_run-{r}_stim.h5",
+            )
         ]
         for p in cands:
             if p.is_file():
@@ -516,19 +535,23 @@ def resolve_stim_source(ctx, bids_root, run, force_params):
             meta={"h5": str(h5_path)},
         )
 
-    # ---- 3) vistadisplog run-level _params.mat ----
+    # ---- 3) vistadisplog run-level _params.mat (run-01 or run-1) ----
     if run is not None:
         cand = [
-            bids_root
-            / "sourcedata"
-            / "vistadisplog"
-            / f"sub-{sub}"
-            / f"ses-{ses}"
-            / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat",
-            bids_root
-            / "sourcedata"
-            / "vistadisplog"
-            / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_params.mat",
+            p
+            for r in _run_labels(run)
+            for p in (
+                bids_root
+                / "sourcedata"
+                / "vistadisplog"
+                / f"sub-{sub}"
+                / f"ses-{ses}"
+                / f"sub-{sub}_ses-{ses}_task-{task}_run-{r}_params.mat",
+                bids_root
+                / "sourcedata"
+                / "vistadisplog"
+                / f"sub-{sub}_ses-{ses}_task-{task}_run-{r}_params.mat",
+            )
         ]
         for mp in cand:
             if mp.is_file():
