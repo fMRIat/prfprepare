@@ -8,6 +8,7 @@
     "fmriprep_legacy_layout": false,
     "forceParams": "",
     "use_numImages": false,
+    "n_jobs": 1,
     "config": {
         "analysisSpace": "fsnative",
         "average_runs": false,

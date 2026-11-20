@@ -25,6 +25,7 @@ OUTPUT_DIR="${DATA_DIR}/derivatives/prfprepare"
 
 VERBOSE=0
 FORCE=0
+N_JOBS=""        # empty: use n_jobs from the config
 CONFIG_FILE=""   # Will default to DEFAULT_CONFIG if not provided
 
 export PYTHONUNBUFFERED=1
@@ -47,6 +48,7 @@ Options:
     -h, --help              Show this help and exit
     -v, --verbose           Verbose / debug logging
     -f, --force             Force overwrite behaviors (exported to Python)
+    -j, --n-jobs N          Parallel masking workers (0 = all CPUs; overrides config n_jobs)
         --config PATH       Explicit config file (overrides default & positional)
     DEBUG                   Drop into interactive shell instead of running
 
@@ -78,6 +80,11 @@ while [[ $# -gt 0 ]]; do
         -h|--help) usage; exit 0 ;;
         -v|--verbose) VERBOSE=1 ;;
         -f|--force) FORCE=1 ;;
+        -j|--n-jobs)
+                shift || die "--n-jobs requires a number"
+                N_JOBS="$1" ;;
+        --n-jobs=*)
+                N_JOBS="${1#*=}" ;;
         --config)
                 shift || die "--config requires a path"
                 CONFIG_FILE="$1" ;;
@@ -123,6 +130,7 @@ export FORCE VERBOSE
 PY_ARGS=(--config "$CONFIG_FILE")
 (( FORCE )) && PY_ARGS+=(--force)
 (( VERBOSE )) && PY_ARGS+=(--verbose)
+[[ -n "$N_JOBS" ]] && PY_ARGS+=(--n_jobs "$N_JOBS")
 
 echo "##############################################################################"
 echo "                              Running prfprepare                              "

@@ -49,10 +49,21 @@ def _load_bold_data(in_path):
             data = img.agg_data()
         elif hasattr(img, "get_fdata"):
             data = img.get_fdata(dtype=np.float32)
+            if data.ndim != 4:
+                raise ValueError(f"Expected 4D BOLD NIfTI; got shape {data.shape}")
         else:
             raise ValueError("Input is nibabel image but type not recognized!")
 
     return data, img
+
+
+def masked_bold_path(ctx) -> Path:
+    """Output path of the masked BOLD for the run described by ctx."""
+    return (
+        ctx["func_out"]
+        / f"sub-{ctx.get('sub')}_ses-{ctx.get('ses')}_task-{ctx.get('task')}"
+        f"_run-{ctx.get('run')}_hemi-{ctx.get('hemi').upper()}_bold.nii.gz"
+    )
 
 
 def apply_masks_to_run(
@@ -93,30 +104,23 @@ def apply_masks_to_run(
         Contains information about applied masks and output files.
     """
     force = ctx.get("force")
-    sub = ctx.get("sub")
-    ses = ctx.get("ses")
-    task = ctx.get("task")
-    run = ctx.get("run")
     hemi = ctx.get("hemi")
     in_path = ctx["bold_path"]
-    out_dir = ctx["func_out"]
     tr = float(getattr(stim, "tr"))
 
     LOG = ctx.get("log") or get_logger(
         __file__, verbose=bool(ctx.get("verbose", False))
     )
 
-    nii_path = (
-        out_dir
-        / f"sub-{sub}_ses-{ses}_task-{task}_run-{run}_hemi-{hemi.upper()}_bold.nii.gz"
-    )
+    nii_path = masked_bold_path(ctx)
     if force or not nii_path.exists():
         # mask NIfTI
         if output_only_average:
             return
 
-        # --- load BOLD
-        data, img = _load_bold_data(in_path)
+        # --- load BOLD (reuse the image the caller already loaded, if any)
+        bold_img = ctx.get("bold_img")
+        data, img = _load_bold_data(bold_img if bold_img is not None else in_path)
 
         # Trim BOLD data based on start_scan
         # start_scan in seconds: volumes are acquired but stimulus not yet started

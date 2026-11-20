@@ -2,12 +2,14 @@
 
 import argparse
 import collections
+import hashlib
 import importlib
 import json
 import os
 import subprocess as sp
 import sys
 import time
+import types
 from glob import glob
 from os import path
 from pathlib import Path
@@ -96,7 +98,9 @@ def _read_tr_from_sidecar(json_path: Path, LOG=None) -> float | None:
     return None
 
 
-def _get_bold_T_and_TR(p: Path, LOG=None) -> tuple[int | None, float | None]:
+def _get_bold_T_and_TR(
+    p: Path, LOG=None, img=None
+) -> tuple[int | None, float | None]:
     """Return (#timepoints, TR seconds) from a BOLD file and its sidecar.
 
     T is derived from the image (nibabel) where possible.
@@ -108,6 +112,9 @@ def _get_bold_T_and_TR(p: Path, LOG=None) -> tuple[int | None, float | None]:
         Path to the BOLD file (NIfTI or GIFTI).
     LOG : logger, optional
         Logger instance for debug/warning messages.
+    img : nibabel image, optional
+        The already loaded image of ``p``. Loading a GIFTI parses the whole
+        file, so callers that need the image anyway should pass it in.
 
     Returns
     -------
@@ -115,15 +122,19 @@ def _get_bold_T_and_TR(p: Path, LOG=None) -> tuple[int | None, float | None]:
         Tuple of (timepoints, TR_seconds). Either can be None if not available.
     """
     try:
-        img = nib.load(str(p))
+        if img is None:
+            img = nib.load(str(p))
         # T from data
         T = None
         try:
-            data = None
-            # For GIFTI, use agg_data; for NIfTI shape[-1]
+            # For GIFTI, one darray per timepoint (or a single 2D darray);
+            # for NIfTI shape[-1]
             if hasattr(img, "agg_data"):
-                data = img.agg_data()
-                T = int(data.shape[-1]) if data is not None else None
+                darrays = img.darrays
+                if len(darrays) == 1 and np.ndim(darrays[0].data) > 1:
+                    T = int(darrays[0].data.shape[-1])
+                else:
+                    T = len(darrays) or None
             else:
                 shp = img.shape
                 T = int(shp[-1]) if len(shp) >= 4 else None
@@ -174,9 +185,20 @@ def _log_stim_file_tr_mismatch(stim, file_TR: float | None, LOG) -> None:
 
 
 def _log_timepoints_mismatch(
-    file_T: int | None, aperture_T: int, where: str, LOG
+    file_T: int | None,
+    aperture_T: int,
+    where: str,
+    LOG,
+    file_TR: float | None = None,
+    frame_tr: float | None = None,
 ) -> None:
-    """Log an error if file_T is present and differs from aperture_T.
+    """Log an error if the aperture and the file do not cover the same time.
+
+    With an aperture on the scan's TR the frame counts must match. With
+    output_all_frames the aperture is on the stimulus' own frame clock
+    (frame_tr, e.g. 0.125 s for 2400 frames over 300 volumes at TR 1 s), so
+    the counts differ by design and the durations are compared instead,
+    allowing one frame of rounding.
 
     Parameters
     ----------
@@ -188,8 +210,27 @@ def _log_timepoints_mismatch(
         Description of where the mismatch was found.
     LOG : logger
         Logger instance for error messages.
+    file_TR : float, optional
+        TR of the file in seconds.
+    frame_tr : float, optional
+        Seconds per aperture frame.
     """
-    if file_T is not None and int(file_T) != int(aperture_T):
+    if file_T is None:
+        return
+    high_res = (
+        frame_tr is not None
+        and file_TR is not None
+        and not np.isclose(float(frame_tr), float(file_TR), rtol=1e-5, atol=1e-8)
+    )
+    if high_res:
+        ap_dur = int(aperture_T) * float(frame_tr)
+        file_dur = int(file_T) * float(file_TR)
+        if abs(ap_dur - file_dur) > float(frame_tr) + 1e-6:
+            LOG.error(
+                f"Duration mismatch: stimulus/aperture {ap_dur:g}s (T={int(aperture_T)} @ {float(frame_tr):g}s) "
+                f"vs file {file_dur:g}s (T={int(file_T)} @ TR {float(file_TR):g}s) at {where}"
+            )
+    elif int(file_T) != int(aperture_T):
         LOG.error(
             f"Timepoints mismatch: stimulus/aperture T={int(aperture_T)} vs file T={int(file_T)} at {where}"
         )
@@ -260,7 +301,7 @@ def _bold_path_for(
         raise ValueError(f"Unsupported analysis_space: {analysis_space}")
 
 
-def _average_runs_bold(bold_paths, LOG):
+def _average_runs_bold(bold_paths, LOG, imgs=None):
     """Crop to shortest T and compute voxel-wise mean across multiple BOLD runs.
 
     Parameters
@@ -269,6 +310,9 @@ def _average_runs_bold(bold_paths, LOG):
         List of paths to BOLD files to average.
     LOG : logger
         Logger instance for info messages.
+    imgs : list, optional
+        Already loaded images aligned with ``bold_paths``; None entries (or no
+        list at all) are loaded from their path.
 
     Returns
     -------
@@ -281,8 +325,12 @@ def _average_runs_bold(bold_paths, LOG):
     ValueError
         If BOLD files have different spatial dimensions.
     """
-    # Load all inputs
-    imgs = [nib.load(str(p)) for p in bold_paths]
+    # Load all inputs not already in memory
+    imgs = imgs or [None] * len(bold_paths)
+    imgs = [
+        img if img is not None else nib.load(str(p))
+        for p, img in zip(bold_paths, imgs)
+    ]
 
     # Determine file type from suffix (all must match)
     def _suffix_kind(p: Path) -> str:
@@ -301,34 +349,42 @@ def _average_runs_bold(bold_paths, LOG):
     kind = kinds.pop()
 
     if kind == "nifti":
-        # Validate spatial dims and crop to shortest T
-        datas = []
+        # Validate spatial dims and find the shortest T from the headers, so
+        # the data can be summed one run at a time instead of all held at once
         spatial_shape = None
         Ts = []
-        for img in imgs:
-            d = img.get_fdata(dtype=np.float32)
-            if d.ndim != 4:
-                raise ValueError(f"Expected 4D BOLD NIfTI; got shape {d.shape}")
+        for i, img in enumerate(imgs):
+            if len(img.shape) != 4:
+                raise ValueError(f"Expected 4D BOLD NIfTI; got shape {img.shape}")
             if spatial_shape is None:
-                spatial_shape = d.shape[:3]
-            elif d.shape[:3] != spatial_shape:
+                spatial_shape = img.shape[:3]
+            elif img.shape[:3] != spatial_shape:
                 raise ValueError(
                     "All BOLD files must have the same spatial dimensions for averaging"
                 )
             elif not np.allclose(img.affine, imgs[0].affine, atol=1e-5):
                 raise ValueError(
                     "All BOLD files must share the same voxel grid (affine) for "
-                    f"averaging; {bold_paths[len(datas)]} differs from {bold_paths[0]}"
+                    f"averaging; {bold_paths[i]} differs from {bold_paths[0]}"
                 )
-            datas.append(d)
-            Ts.append(d.shape[-1])
+            Ts.append(img.shape[-1])
 
         min_T = min(Ts)
         if min_T < max(Ts):
             LOG.debug(f"Cropping runs to shortest T={min_T} for averaging")
-        datas = [d[..., :min_T] for d in datas]
 
-        mean = np.mean(np.stack(datas, axis=0), axis=0)
+        # Running float32 sum in run order, then divide: bit-identical to
+        # np.mean over the stacked runs
+        mean = None
+        for img in imgs:
+            d = img.get_fdata(dtype=np.float32)[..., :min_T]
+            if mean is None:
+                mean = d.copy()
+            else:
+                mean += d
+            img.uncache()
+            del d
+        mean /= len(imgs)
         avg_img = nib.Nifti1Image(mean, imgs[0].affine, imgs[0].header)
         LOG.info(f"Averaged {len(bold_paths)} runs (T={min_T})")
         return avg_img
@@ -387,6 +443,216 @@ def _average_runs_bold(bold_paths, LOG):
 
     else:
         raise ValueError(f"Unsupported analysis file type for averaging: {kind}")
+
+
+def _resolve_n_jobs(n_jobs) -> int:
+    """Number of masking workers; 0, "auto" or "all" means all usable CPUs."""
+    if str(n_jobs).strip().lower() in ("0", "auto", "all", "-1"):
+        try:
+            return max(1, len(os.sched_getaffinity(0)))
+        except AttributeError:  # not available on macOS
+            return max(1, os.cpu_count() or 1)
+    return max(1, int(n_jobs))
+
+
+def _mask_job(job: dict) -> dict:
+    """Load, check and mask the BOLD runs of one job; average them if asked.
+
+    Runs in a worker process. Only reads the ROI packs (prepared beforehand
+    by the main process), so jobs can run concurrently. Items are processed
+    in order; an item marked done only contributes its path to the average.
+
+    Returns
+    -------
+    dict
+        {"averaged": bool}: whether an average was computed, so the main
+        process can write its events.tsv.
+    """
+    apply_masks_to_run = _import_any(
+        ["nii_to_surfNii", "scripts.nii_to_surfNii"]
+    ).apply_masks_to_run
+    prepare_roi_pack = _import_any(["roi_pack", "scripts.roi_pack"]).prepare_roi_pack
+
+    common = job["common"]
+    stim = common["stim"]
+    timepoints = common["timepoints"]
+    continue_on_error = common["continue_on_error"]
+    avg_ctx = job.get("avg_ctx")
+
+    # one image per file, so volume jobs masking both hemis read it once
+    loaded = {}
+    run_paths, run_imgs = [], []
+    for it in job["items"]:
+        c = it["ctx"]
+        LOG = c["log"]
+        bold_path = it["bold_path"]
+        if it["done"]:
+            run_paths.append(bold_path)
+            run_imgs.append(None)
+            continue
+        try:
+            t0 = time.perf_counter()
+            if bold_path not in loaded:
+                loaded[bold_path] = nib.load(str(bold_path))
+            bold_img = loaded[bold_path]
+            LOG.debug(f"BOLD loaded in {time.perf_counter()-t0:.2f}s: {bold_path.name}")
+            c = {**c, "bold_path": bold_path, "bold_img": bold_img}
+
+            # Per-run check: compare aperture T vs file T
+            file_T, file_TR = _get_bold_T_and_TR(bold_path, LOG=LOG, img=bold_img)
+            _log_stim_file_tr_mismatch(stim, file_TR, LOG)
+            _log_timepoints_mismatch(
+                file_T,
+                timepoints,
+                str(bold_path),
+                LOG,
+                file_TR=file_TR if file_TR is not None else stim.tr,
+                frame_tr=common.get("frame_tr"),
+            )
+
+            # The pack exists already; this validates the BOLD against it.
+            # Never rebuild here: other jobs may be reading the same file.
+            roi_pack = prepare_roi_pack(
+                ctx={**c, "force": False, "roi_pack_read_only": True},
+                bold_img=bold_img,
+                **common["pack_args"],
+            )
+
+            # ROI masking using the appropriate grid
+            t0 = time.perf_counter()
+            apply_masks_to_run(
+                ctx=c,
+                stim=stim,
+                roi_pack=roi_pack,
+                output_only_average=common["output_only_average"],
+            )
+            LOG.debug(f"Masking complete in {time.perf_counter()-t0:.2f}s")
+
+            run_paths.append(bold_path)
+            # Keep parsed GIFTIs for averaging. A NIfTI is cheap to reopen
+            # and would hold its 4D data in memory.
+            run_imgs.append(
+                bold_img if avg_ctx and hasattr(bold_img, "agg_data") else None
+            )
+        except Exception as e:
+            LOG.error(
+                f"Failed run: sub-{c.get('sub')} ses-{c.get('ses') or 'NA'} "
+                f"task-{c.get('task')} run-{c.get('run')} hemi-{c.get('hemi')} ({e})"
+            )
+            if not continue_on_error:
+                raise
+    loaded.clear()
+
+    averaged = False
+    if avg_ctx and len(run_paths) >= 2:
+        LOG = avg_ctx["log"]
+        LOG.info(
+            f"\tAveraging {len(run_paths)} runs for sub-{avg_ctx['sub']} "
+            f"task-{avg_ctx['task']} hemi-{avg_ctx['hemi']}"
+        )
+        try:
+            t0 = time.perf_counter()
+            avg_img = _average_runs_bold(run_paths, LOG, imgs=run_imgs)
+            del run_imgs
+            averaged = True
+            LOG.debug(f"Average computed in {time.perf_counter()-t0:.2f}s")
+            c = {**avg_ctx, "bold_path": avg_img}
+            roi_pack = prepare_roi_pack(
+                ctx={**c, "force": False, "roi_pack_read_only": True},
+                bold_img=avg_img,
+                **common["pack_args"],
+            )
+            t0 = time.perf_counter()
+            apply_masks_to_run(
+                ctx=c, stim=stim, roi_pack=roi_pack, output_only_average=False
+            )
+            LOG.debug(f"Masking (avg) complete in {time.perf_counter()-t0:.2f}s")
+        except Exception as e:
+            LOG.error(
+                f"Averaging failed for sub-{avg_ctx['sub']} ses-{avg_ctx.get('ses') or 'NA'} "
+                f"task-{avg_ctx['task']} ({e})"
+            )
+            if not continue_on_error:
+                raise
+    return {"averaged": averaged}
+
+
+class _MaskRunner:
+    """Runs masking jobs inline (n_jobs=1) or in a pool of spawned processes.
+
+    Jobs are submitted per subject as soon as it is prepared, so masking
+    overlaps with preparing the next subject; that is safe because every
+    subject has its own ROI pack. Spawned processes inherit nothing (open
+    HDF5 handles, caches) from the main process. If a job raises
+    (continue_on_error off), pending jobs are cancelled and the error is
+    re-raised.
+    """
+
+    def __init__(self, n_jobs: int, on_result):
+        self.n_jobs = n_jobs
+        self.on_result = on_result  # called in the main process per finished job
+        self.ex = None
+        self.n_submitted = 0
+        self.pending = []  # (job, future) not yet handed to on_result
+
+    def submit(self, jobs: list) -> None:
+        import concurrent.futures as cf
+        import multiprocessing as mp
+
+        for job in jobs:
+            self.n_submitted += 1
+            if self.n_jobs <= 1:
+                self.on_result(job, _mask_job(job))
+                continue
+            if self.ex is None:
+                self.ex = cf.ProcessPoolExecutor(
+                    max_workers=self.n_jobs, mp_context=mp.get_context("spawn")
+                )
+            self.pending.append((job, self.ex.submit(_mask_job, job)))
+        self.collect(wait=False)
+
+    def collect(self, wait: bool) -> None:
+        """Hand finished jobs to on_result; with wait, wait for all of them.
+
+        A job that raised (continue_on_error off) re-raises here, so a
+        failure stops the run at the next subject instead of at the end.
+        """
+        still = []
+        for job, f in self.pending:
+            if wait or f.done():
+                self.on_result(job, f.result())
+            else:
+                still.append((job, f))
+        self.pending = still
+
+    def close(self, cancel: bool = False) -> None:
+        if self.ex is not None:
+            self.ex.shutdown(wait=True, cancel_futures=cancel)
+            self.ex = None
+
+
+def _stim_signature(stim) -> str:
+    """Digest of everything an aperture is built from, to tell whether two
+    sessions' stimuli for a task would produce the same aperture file."""
+    h = hashlib.sha1()
+    frames = getattr(stim, "frames", None)
+    for v in (
+        getattr(frames, "images", None),
+        getattr(stim, "seq", None),
+        getattr(stim, "tr", None),
+        getattr(stim, "seqtiming", None),
+        getattr(stim, "prescan", None),
+        getattr(stim, "numImages", None),
+        getattr(stim, "aperture_nii", None),
+        getattr(stim, "task", None),
+    ):
+        if isinstance(v, np.ndarray):
+            h.update(repr((v.dtype.str, v.shape)).encode())
+            h.update(np.ascontiguousarray(v).tobytes())
+        else:
+            h.update(repr(v).encode())
+        h.update(b"|")
+    return h.hexdigest()
 
 
 def _update_standard_config(in_config: dict, scripts_dir: str) -> dict:
@@ -613,8 +879,9 @@ def process_subject_session(config: dict, in_root: Path):
     # try package-style first for static analysis, fall back to flat modules for runtime in Docker.
     write_events_mod = _import_any(["link_stimuli", "scripts.link_stimuli"])
     write_events = write_events_mod.write_events
-    apply_masks_to_run = _import_any(["nii_to_surfNii", "scripts.nii_to_surfNii"])
-    apply_masks_to_run = apply_masks_to_run.apply_masks_to_run
+    nii_to_surfNii_mod = _import_any(["nii_to_surfNii", "scripts.nii_to_surfNii"])
+    apply_masks_to_run = nii_to_surfNii_mod.apply_masks_to_run
+    masked_bold_path = nii_to_surfNii_mod.masked_bold_path
     roi_pack_mod = _import_any(["roi_pack", "scripts.roi_pack"])
     prepare_roi_pack = roi_pack_mod.prepare_roi_pack
     generate_aperture_nii = _import_any(["stim_as_nii", "scripts.stim_as_nii"])
@@ -763,312 +1030,382 @@ def process_subject_session(config: dict, in_root: Path):
 
     subs = _config2list(cfg_subs, bids_subs)
 
-    for sub in subs:
-        ctx["sub"] = sub
+    pack_args = {
+        "analysis_space": analysis_space,
+        "atlases": atlases,
+        "rois": rois,
+        "fs_dir": fs_dir,
+        "custom_annots": custom_annots if custom_annots else None,
+        "out_base": out_base,
+    }
+    # (sub, grid) packs already rebuilt in this process
+    rebuilt = set()
 
-        # discover sessions
-        bids_sess = layout.get_sessions(subject=sub)
-        LOG.debug(f"Subject {sub}: found {len(bids_sess)} sessions in layout")
-        cfg_sess = _config2list(config.get("sessions", "all"))
-        if cfg_sess[0] != "all" and not np.all([a in bids_sess for a in cfg_sess]):
-            LOG.warn(
-                f"We did not find given session {cfg_sess} for subject {sub} in BIDS dir!"
+    def _pack(c, bold_path):
+        """Prepare the ROI pack for a run without loading its data.
+
+        Surface packs are validated against geometry and atlases here; the
+        BOLD vertex check happens in the masking job. A volume grid comes from
+        the NIfTI header. With force, each pack (surface) or grid (volume) is
+        rebuilt once instead of once per run: same result, written once.
+        """
+        bimg = nib.load(str(bold_path)) if analysis_space == "volume" else None
+        gid = (
+            roi_pack_mod._grid_signature(bimg.shape[:3], bimg.affine)
+            if bimg is not None
+            else None
+        )
+        first = (c["sub"], gid) not in rebuilt
+        rebuilt.add((c["sub"], gid))
+        return prepare_roi_pack(
+            ctx={**c, "force": bool(c.get("force")) and first},
+            bold_img=bimg,
+            **pack_args,
+        )
+
+    # masking jobs of the subject being prepared; submitted when it is done
+    jobs = []
+
+    def _job_done(job, result):
+        # Events of a computed average are written here, in the main process,
+        # so the two hemispheres' jobs never write the same file.
+        if result["averaged"]:
+            c = job["common"]
+            _ = write_events(
+                ctx=job["avg_ctx"],
+                stim=c["stim"],
+                stim_name=c["stim_name"],
+                timepoints=c["timepoints"],
+                output_only_average=False,
+                frame_tr=c.get("frame_tr"),
             )
 
-        sess = _config2list(cfg_sess, bids_sess)
+    runner = _MaskRunner(_resolve_n_jobs(config.get("n_jobs", 1)), _job_done)
+    # apertures already built in this process (with force)
+    apertures_made = set()
 
-        for ses in sess:
-            ctx["ses"] = ses
-            LOG.info(f"Subject {sub} | Session {ses or 'NA'}")
+    t_start = time.perf_counter()
+    try:
+        for sub in subs:
+            ctx["sub"] = sub
 
-            # discover tasks
-            bids_tasks = layout.get_tasks(subject=sub, session=ses)
-            LOG.debug(
-                f"Subject {sub} | Session {ses or 'NA'}: found {len(bids_tasks)} tasks"
-            )
-            cfg_tasks = _config2list(config.get("tasks", "all"))
-            if cfg_tasks[0] != "all" and not np.all(
-                [a in bids_tasks for a in cfg_tasks]
-            ):
+            # discover sessions
+            bids_sess = layout.get_sessions(subject=sub)
+            LOG.debug(f"Subject {sub}: found {len(bids_sess)} sessions in layout")
+            cfg_sess = _config2list(config.get("sessions", "all"))
+            if cfg_sess[0] != "all" and not np.all([a in bids_sess for a in cfg_sess]):
                 LOG.warn(
-                    f"We did not find given task {cfg_tasks} for subject {sub} in BIDS dir!"
+                    f"We did not find given session {cfg_sess} for subject {sub} in BIDS dir!"
                 )
 
-            tasks = _config2list(cfg_tasks, bids_tasks)
+            sess = _config2list(cfg_sess, bids_sess)
 
-            for task in tasks:
-                ctx["task"] = task
+            for ses in sess:
+                ctx["ses"] = ses
+                LOG.info(f"Subject {sub} | Session {ses or 'NA'}")
 
-                # discover hemis
-                bids_hemis = ["l", "r"]
-                cfg_hemis = _config2list(config.get("hemis", "all"))
-                if cfg_hemis[0] != "all" and not np.all(
-                    [a in bids_hemis for a in cfg_hemis]
-                ):
-                    LOG.warn(
-                        f"We did not find given hemisphere {cfg_hemis} for subject {sub} in BIDS dir!"
-                    )
-
-                hemis = _config2list(cfg_hemis, bids_hemis)
-
-                # discover runs
-                bids_runs = layout.get_runs(subject=sub, session=ses, task=task)
+                # discover tasks
+                bids_tasks = layout.get_tasks(subject=sub, session=ses)
                 LOG.debug(
-                    f"Subject {sub} | Session {ses or 'NA'} | Task {task}: found {len(bids_runs)} runs"
+                    f"Subject {sub} | Session {ses or 'NA'}: found {len(bids_tasks)} tasks"
                 )
-                cfg_runs = _config2list(config.get("runs", "all"))
-                if cfg_runs[0] != "all" and not np.all(
-                    [a in bids_runs for a in cfg_runs]
+                cfg_tasks = _config2list(config.get("tasks", "all"))
+                if cfg_tasks[0] != "all" and not np.all(
+                    [a in bids_tasks for a in cfg_tasks]
                 ):
                     LOG.warn(
-                        f"We did not find given run {cfg_runs} for subject {sub} in BIDS dir!"
+                        f"We did not find given task {cfg_tasks} for subject {sub} in BIDS dir!"
                     )
 
-                runs = [str(a) for a in _config2list(cfg_runs, bids_runs)]
+                tasks = _config2list(cfg_tasks, bids_tasks)
 
-                try:
-                    LOG.debug("Resolving stimulus and parameters…")
-                    # Resolve stimulus+params once
+                for task in tasks:
+                    ctx["task"] = task
+
+                    # discover hemis
+                    bids_hemis = ["l", "r"]
+                    cfg_hemis = _config2list(config.get("hemis", "all"))
+                    if cfg_hemis[0] != "all" and not np.all(
+                        [a in bids_hemis for a in cfg_hemis]
+                    ):
+                        LOG.warn(
+                            f"We did not find given hemisphere {cfg_hemis} for subject {sub} in BIDS dir!"
+                        )
+
+                    hemis = _config2list(cfg_hemis, bids_hemis)
+
+                    # discover runs
+                    bids_runs = layout.get_runs(subject=sub, session=ses, task=task)
+                    LOG.debug(
+                        f"Subject {sub} | Session {ses or 'NA'} | Task {task}: found {len(bids_runs)} runs"
+                    )
+                    cfg_runs = _config2list(config.get("runs", "all"))
+                    if cfg_runs[0] != "all" and not np.all(
+                        [a in bids_runs for a in cfg_runs]
+                    ):
+                        LOG.warn(
+                            f"We did not find given run {cfg_runs} for subject {sub} in BIDS dir!"
+                        )
+
+                    runs = [str(a) for a in _config2list(cfg_runs, bids_runs)]
+
+                    try:
+                        LOG.debug("Resolving stimulus and parameters…")
+                        # Resolve stimulus+params once
+                        t0 = time.perf_counter()
+                        stim = resolve_stim_source(
+                            ctx=ctx,
+                            bids_root=bids_dir,
+                            run=runs[0],
+                            force_params=_config2list(config.get("force_params", None)),
+                        )
+                        if stim is None:
+                            raise Warning("No stimulus/params for this run; skipping.")
+                        LOG.debug(
+                            f"Stimulus resolved (kind={getattr(stim, 'kind', 'n/a')}, n_frames={getattr(stim, 'n_frames', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
+                        )
+                    except Exception as e:
+                        LOG.error(
+                            f"Skipping task-{task} for sub-{sub} ses-{ses or 'NA'}: {e}"
+                        )
+                        if continue_on_error:
+                            # clean up inner-scope ctx keys before skipping the task
+                            ctx.pop("func_out", None)
+                            ctx.pop("stim_out", None)
+                            continue
+                        raise
+
+                    # Output dirs
+                    ctx["func_out"] = out_base / f"sub-{sub}" / f"ses-{ses}" / "func"
+                    ctx["stim_out"] = out_base / f"sub-{sub}" / "stimuli"
+                    bold_base_dir = in_dir / f"sub-{sub}" / f"ses-{ses}" / "func"
+                    for d in (ctx["func_out"], ctx["stim_out"]):
+                        d.mkdir(parents=True, exist_ok=True)
+
+                    # compute the aperture for the given task
+                    LOG.debug("Generating aperture NIfTI…")
                     t0 = time.perf_counter()
-                    stim = resolve_stim_source(
-                        ctx=ctx,
-                        bids_root=bids_dir,
-                        run=runs[0],
-                        force_params=_config2list(config.get("force_params", None)),
+                    # The aperture file is per subject and task, shared by all
+                    # sessions. With force, build it once per distinct stimulus
+                    # instead of rewriting the same file for every session.
+                    ap_key = (ctx["stim_out"], _stim_signature(stim))
+                    aperture_name, timepoints = generate_aperture_nii(
+                        {**ctx, "force": ctx["force"] and ap_key not in apertures_made},
+                        stim,
+                        use_numImages,
+                        output_all_frames,
                     )
-                    if stim is None:
-                        raise Warning("No stimulus/params for this run; skipping.")
-                    LOG.debug(
-                        f"Stimulus resolved (kind={getattr(stim, 'kind', 'n/a')}, n_frames={getattr(stim, 'n_frames', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
-                    )
-                except Exception as e:
-                    LOG.error(
-                        f"Skipping task-{task} for sub-{sub} ses-{ses or 'NA'}: {e}"
-                    )
-                    if continue_on_error:
-                        # clean up inner-scope ctx keys before skipping the task
-                        ctx.pop("func_out", None)
-                        ctx.pop("stim_out", None)
-                        continue
-                    raise
-
-                # Output dirs
-                ctx["func_out"] = out_base / f"sub-{sub}" / f"ses-{ses}" / "func"
-                ctx["stim_out"] = out_base / f"sub-{sub}" / "stimuli"
-                bold_base_dir = in_dir / f"sub-{sub}" / f"ses-{ses}" / "func"
-                for d in (ctx["func_out"], ctx["stim_out"]):
-                    d.mkdir(parents=True, exist_ok=True)
-
-                # Prepare a sample BOLD path (first run/hemi) to validate TR vs stim and T vs apertures
-                sample_hemi = None
-                sample_run = None
-                if len(hemis) > 0 and len(runs) > 0:
-                    sample_hemi = hemis[0]
-                    sample_run = runs[0]
-                sample_bold_path = None
-                if sample_hemi is not None and sample_run is not None:
-                    sample_bold_path = _bold_path_for(
-                        bold_base_dir,
-                        analysis_space,
-                        sub,
-                        ses,
-                        task,
-                        sample_run,
-                        sample_hemi,
-                    )
-
-                # If sample exists, compare stim TR vs file TR
-                if sample_bold_path and sample_bold_path.exists():
-                    _, file_TR = _get_bold_T_and_TR(sample_bold_path, LOG=LOG)
-                    _log_stim_file_tr_mismatch(stim, file_TR, LOG)
-                else:
-                    LOG.debug(
-                        "Sample BOLD file not found; will validate per-run instead."
-                    )
-
-                # compute the aperture for the given task
-                LOG.debug("Generating aperture NIfTI…")
-                t0 = time.perf_counter()
-                aperture_name, timepoints = generate_aperture_nii(
-                    ctx, stim, use_numImages, output_all_frames
-                )
-                LOG.debug(
-                    f"Aperture ready: {aperture_name} (T={timepoints}) in {time.perf_counter()-t0:.2f}s"
-                )
-
-                # If sample exists, compare aperture T vs file T
-                if sample_bold_path and sample_bold_path.exists():
-                    file_T, _ = _get_bold_T_and_TR(sample_bold_path, LOG=LOG)
-                    _log_timepoints_mismatch(
-                        file_T, timepoints, str(sample_bold_path), LOG
-                    )
-
-                for hemi in hemis:
-                    ctx["hemi"] = hemi
-
-                    all_run_paths = []
-                    for run in runs:
-                        ctx["run"] = run
-                        ctx.pop("bold_path", None)
-                        LOG.info(
-                            f"Subject {sub} | Session {ses or 'NA'} | Task {task} | Run {run} | Hemi {hemi.upper() or 'NA'}"
-                        )
+                    apertures_made.add(ap_key)
+                    # Seconds per aperture frame: the scan TR, or with
+                    # output_all_frames the stimulus' own frame time, which
+                    # stim_as_nii writes to pixdim[4] (header only, cheap).
+                    frame_tr = float(stim.tr)
+                    if output_all_frames:
                         try:
-                            ctx["bold_path"] = _bold_path_for(
-                                bold_base_dir,
-                                analysis_space,
-                                sub,
-                                ses,
-                                task,
-                                run,
-                                hemi,
+                            zoom_t = float(
+                                nib.load(str(aperture_name)).header.get_zooms()[3]
                             )
+                            if np.isfinite(zoom_t) and zoom_t > 0:
+                                frame_tr = zoom_t
+                        except Exception as e:
+                            LOG.warn(
+                                f"Could not read frame time from {aperture_name} ({e}); using TR {frame_tr}s"
+                            )
+                    LOG.debug(
+                        f"Aperture ready: {aperture_name} (T={timepoints}, frame={frame_tr:g}s) in {time.perf_counter()-t0:.2f}s"
+                    )
 
-                            # check if bold_path exists
-                            if not ctx["bold_path"].exists():
-                                LOG.error(
-                                    f"BOLD file not found: {ctx['bold_path']}, skipping."
+                    # Prepare phase. Everything that writes shared files (events,
+                    # the subject's ROI pack and its meta JSON) runs here, in order,
+                    # without opening the BOLD. Loading and masking the BOLD is
+                    # queued as jobs and run after all subjects are prepared.
+                    task_ctx = dict(ctx)
+                    common = {
+                        "stim": types.SimpleNamespace(
+                            tr=stim.tr, start_scan=getattr(stim, "start_scan", 0.0)
+                        ),
+                        "stim_name": aperture_name.name,
+                        "timepoints": timepoints,
+                        "frame_tr": frame_tr,
+                        "output_only_average": output_only_average,
+                        "continue_on_error": continue_on_error,
+                        "pack_args": pack_args,
+                    }
+                    # volume runs, both hemis in one job so the NIfTI is read once
+                    volume_items = {run: [] for run in runs}
+
+                    for hemi in hemis:
+                        hctx = {**task_ctx, "hemi": hemi}
+
+                        do_average = average_runs and len(runs) >= 2
+                        avg_ctx = {**hctx, "run": "".join(runs) + "avg"}
+                        avg_done = (
+                            do_average
+                            and not ctx["force"]
+                            and masked_bold_path(avg_ctx).exists()
+                        )
+                        items = []
+                        for run in runs:
+                            rctx = {**hctx, "run": run}
+                            LOG.info(
+                                f"Subject {sub} | Session {ses or 'NA'} | Task {task} | Run {run} | Hemi {hemi.upper() or 'NA'}"
+                            )
+                            try:
+                                bold_path = _bold_path_for(
+                                    bold_base_dir,
+                                    analysis_space,
+                                    sub,
+                                    ses,
+                                    task,
+                                    run,
+                                    hemi,
                                 )
-                                continue
 
-                            # Per-run check: compare aperture T vs file T
-                            file_T, file_TR = _get_bold_T_and_TR(
-                                ctx["bold_path"], LOG=LOG
-                            )
-                            _log_stim_file_tr_mismatch(stim, file_TR, LOG)
-                            _log_timepoints_mismatch(
-                                file_T, timepoints, str(ctx["bold_path"]), LOG
-                            )
+                                # check if bold_path exists
+                                if not bold_path.exists():
+                                    LOG.error(
+                                        f"BOLD file not found: {bold_path}, skipping."
+                                    )
+                                    continue
 
-                            # write events.tsv for each run
-                            LOG.debug("Writing events.tsv…")
-                            _ = write_events(
-                                ctx=ctx,
-                                stim=stim,
-                                stim_name=aperture_name.name,
-                                timepoints=timepoints,
-                                output_only_average=output_only_average,
-                            )
+                                # write events.tsv for each run
+                                LOG.debug("Writing events.tsv…")
+                                _ = write_events(
+                                    ctx=rctx,
+                                    stim=stim,
+                                    stim_name=aperture_name.name,
+                                    timepoints=timepoints,
+                                    output_only_average=output_only_average,
+                                    frame_tr=frame_tr,
+                                )
 
-                            # Prepare/load ROI pack for this specific run/grid
-                            LOG.debug("Preparing ROI cache for this run…")
-                            t0 = time.perf_counter()
-                            roi_pack = prepare_roi_pack(
-                                ctx=ctx,
-                                analysis_space=analysis_space,
-                                atlases=atlases,
-                                rois=rois,
-                                fs_dir=fs_dir,
-                                custom_annots=custom_annots if custom_annots else None,
-                                out_base=out_base,
-                                bold_img=ctx.get("bold_path"),
-                            )
-                            LOG.debug(
-                                f"ROI cache ready (key={getattr(roi_pack, 'key', 'n/a')}, file={getattr(roi_pack, 'h5_path', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
-                            )
+                                # Prepare/load ROI pack for this specific run/grid
+                                LOG.debug("Preparing ROI cache for this run…")
+                                t0 = time.perf_counter()
+                                roi_pack = _pack(rctx, bold_path)
+                                LOG.debug(
+                                    f"ROI cache ready (key={getattr(roi_pack, 'key', 'n/a')}, file={getattr(roi_pack, 'h5_path', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
+                                )
 
-                            # ROI masking using the appropriate grid
-                            LOG.debug("Applying ROI masks to run…")
-                            t0 = time.perf_counter()
-                            apply_masks_to_run(
-                                ctx=ctx,
-                                stim=stim,
-                                roi_pack=roi_pack,
-                                output_only_average=output_only_average,
-                            )
-                            LOG.debug(
-                                f"Masking complete in {time.perf_counter()-t0:.2f}s"
-                            )
+                                # Already done: no job, so the BOLD is never loaded,
+                                # which for GIFTI means parsing the whole file. With
+                                # output_only_average there is no per-run output, so
+                                # the run is done once the average is. Volume is not
+                                # skipped: nib.load only reads its header, so there
+                                # is little to save.
+                                done = (
+                                    analysis_space != "volume"
+                                    and not ctx["force"]
+                                    and (
+                                        masked_bold_path(rctx).exists()
+                                        or (output_only_average and avg_done)
+                                    )
+                                )
+                                if done:
+                                    LOG.info(
+                                        f"Output exists, skipping run-{run} hemi-{hemi.upper()}"
+                                    )
+                                items.append(
+                                    {"ctx": rctx, "bold_path": bold_path, "done": done}
+                                )
 
-                            all_run_paths.append(ctx["bold_path"])
-
-                            ctx.pop("bold_path", None)
-
-                        except Exception as e:
-                            LOG.error(
-                                f"Failed run: sub-{sub} ses-{ses or 'NA'} task-{task} run-{run} ({e})"
-                            )
-                            if continue_on_error:
-                                continue
-                            raise
-
-                        ctx.pop("run", None)
-
-                    # Averaging across runs (optional)
-                    if average_runs and len(all_run_paths) >= 2:
-                        ctx["run"] = "".join(runs) + "avg"
-                        LOG.info(
-                            f"\tAveraging {len(all_run_paths)} runs: {', '.join(runs)}"
-                        )
-
-                        try:
-
-                            LOG.debug("Computing average BOLD across runs…")
-                            t0 = time.perf_counter()
-                            ctx["bold_path"] = _average_runs_bold(all_run_paths, LOG)
-                            LOG.debug(
-                                f"Average computed in {time.perf_counter()-t0:.2f}s"
-                            )
-
-                            # write events.tsv for each run
-                            LOG.debug("Writing events.tsv for averaged run…")
-                            _ = write_events(
-                                ctx=ctx,
-                                stim=stim,
-                                stim_name=aperture_name.name,
-                                timepoints=timepoints,
-                                output_only_average=False,
-                            )
-
-                            # Prepare/load ROI pack for the averaged run/grid
-                            LOG.debug("Preparing ROI cache for averaged run…")
-                            t0 = time.perf_counter()
-                            roi_pack = prepare_roi_pack(
-                                ctx=ctx,
-                                analysis_space=analysis_space,
-                                atlases=atlases,
-                                rois=rois,
-                                fs_dir=fs_dir,
-                                custom_annots=custom_annots if custom_annots else None,
-                                out_base=out_base,
-                                bold_img=ctx.get("bold_path"),
-                            )
-                            LOG.debug(
-                                f"ROI cache ready (key={getattr(roi_pack, 'key', 'n/a')}, file={getattr(roi_pack, 'h5_path', 'n/a')}) in {time.perf_counter()-t0:.2f}s"
-                            )
-
-                            # ROI masking
-                            LOG.debug("Applying ROI masks to averaged run…")
-                            t0 = time.perf_counter()
-                            apply_masks_to_run(
-                                ctx=ctx,
-                                stim=stim,
-                                roi_pack=roi_pack,
-                                output_only_average=False,
-                            )
-                            LOG.debug(
-                                f"Masking (avg) complete in {time.perf_counter()-t0:.2f}s"
-                            )
-
-                        except Exception as e:
-                            LOG.error(
-                                f"Averaging failed for sub-{sub} ses-{ses or 'NA'} task-{task} ({e})"
-                            )
-                            if not continue_on_error:
-                                ctx.pop("run", None)
+                            except Exception as e:
+                                LOG.error(
+                                    f"Failed run: sub-{sub} ses-{ses or 'NA'} task-{task} run-{run} ({e})"
+                                )
+                                if continue_on_error:
+                                    continue
                                 raise
 
-                        ctx.pop("run", None)
-                        ctx.pop("bold_path", None)
-                    # clear per-run keys in case a run skipped or averaging did not run
-                    ctx.pop("run", None)
-                    ctx.pop("bold_path", None)
-                    ctx.pop("hemi", None)
-                ctx.pop("task", None)
-                ctx.pop("func_out", None)
-                ctx.pop("stim_out", None)
-            ctx.pop("ses", None)
-        ctx.pop("sub", None)
+                        # Averaging across runs (optional)
+                        if do_average and avg_done:
+                            if len(items) >= 2:
+                                LOG.info(
+                                    f"Averaged masked BOLD exists, skipping run-{avg_ctx['run']} hemi-{hemi.upper()}"
+                                )
+                                try:
+                                    _ = write_events(
+                                        ctx=avg_ctx,
+                                        stim=stim,
+                                        stim_name=aperture_name.name,
+                                        timepoints=timepoints,
+                                        output_only_average=False,
+                                        frame_tr=frame_tr,
+                                    )
+                                    # Averaging needs all runs on one grid, so the
+                                    # first run stands in for the average (header
+                                    # only for volume, recording the grid provenance)
+                                    _pack(avg_ctx, items[0]["bold_path"])
+                                except Exception as e:
+                                    LOG.error(
+                                        f"Averaging failed for sub-{sub} ses-{ses or 'NA'} task-{task} ({e})"
+                                    )
+                                    if not continue_on_error:
+                                        raise
+                        elif do_average:
+                            # One job for the hemisphere: the runs are masked in
+                            # order and their GIFTIs reused for the average.
+                            if len(items) >= 2:
+                                try:
+                                    # provenance for the average, written here
+                                    # rather than concurrently from a job
+                                    _pack(avg_ctx, items[0]["bold_path"])
+                                except Exception as e:
+                                    LOG.error(
+                                        f"Averaging failed for sub-{sub} ses-{ses or 'NA'} task-{task} ({e})"
+                                    )
+                                    if not continue_on_error:
+                                        raise
+                            jobs.append(
+                                {"common": common, "items": items, "avg_ctx": avg_ctx}
+                            )
+                            continue
+
+                        for it in items:
+                            if it["done"]:
+                                continue
+                            if analysis_space == "volume":
+                                volume_items[it["ctx"]["run"]].append(it)
+                            else:
+                                jobs.append(
+                                    {"common": common, "items": [it], "avg_ctx": None}
+                                )
+
+                    for run in runs:
+                        if volume_items[run]:
+                            jobs.append(
+                                {
+                                    "common": common,
+                                    "items": volume_items[run],
+                                    "avg_ctx": None,
+                                }
+                            )
+                    ctx.pop("task", None)
+                    ctx.pop("func_out", None)
+                    ctx.pop("stim_out", None)
+                ctx.pop("ses", None)
+            if jobs:
+                LOG.info(
+                    f"Subject {sub}: queued {len(jobs)} masking jobs "
+                    f"({runner.n_jobs} worker(s))"
+                )
+            runner.submit(jobs)
+            jobs = []
+            ctx.pop("sub", None)
+
+        # Wait for the remaining masking jobs
+        if runner.pending:
+            LOG.info(f"Waiting for {len(runner.pending)} masking jobs…")
+        runner.collect(wait=True)
+        if runner.n_submitted:
+            LOG.info(
+                f"All {runner.n_submitted} masking jobs done "
+                f"({time.perf_counter()-t_start:.1f}s since start)"
+            )
+    except BaseException:
+        runner.close(cancel=True)
+        raise
+    runner.close()
 
     # copy the dataset_description from fmriprep
     LOG.debug("Copying dataset_description.json to output…")
@@ -1124,6 +1461,12 @@ def main():
         "--force", action="store_true", help="Force overwrite existing files"
     )
     ap.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    ap.add_argument(
+        "--n_jobs",
+        type=str,
+        default=None,
+        help="Parallel masking workers (overrides config n_jobs; 0/auto = all CPUs)",
+    )
     args = ap.parse_args()
 
     # get all needed functions
@@ -1146,6 +1489,8 @@ def main():
         config["force"] = True
     if args.verbose:
         config["verbose"] = True
+    if args.n_jobs is not None:
+        config["n_jobs"] = args.n_jobs
 
     if config.get("verbose"):
         # Make verbose available to modules that use env fallback
