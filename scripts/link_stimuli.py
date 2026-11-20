@@ -9,7 +9,12 @@ from prfprepare_logging import get_logger
 
 
 def write_events(
-    ctx, stim, timepoints: int, stim_name: str, output_only_average: bool
+    ctx,
+    stim,
+    timepoints: int,
+    stim_name: str,
+    output_only_average: bool,
+    frame_tr: float | None = None,
 ) -> Path:
     """
     Write BIDS events.tsv file for a given run and task.
@@ -37,6 +42,11 @@ def write_events(
         Name of the stimulus file for the events.
     output_only_average : bool
         If True, skip creating events file.
+    frame_tr : float, optional
+        Seconds per aperture frame. With output_all_frames the aperture is on
+        the stimulus' own frame clock (e.g. 0.125 s), not the scan TR; one
+        event per frame then gets this onset step and duration. Default:
+        stim.tr.
 
     Returns
     -------
@@ -64,7 +74,7 @@ def write_events(
         LOG.debug(f"Events already exist, skipping: {events_path}")
         return events_path
 
-    tr = float(getattr(stim, "tr"))
+    tr = float(frame_tr) if frame_tr else float(getattr(stim, "tr"))
 
     with open(events_path, "w") as f:
         f.write("onset\tduration\tstim_file\tstim_file_index\n")
