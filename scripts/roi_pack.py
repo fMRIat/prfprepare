@@ -118,6 +118,9 @@ def _canonical_meta(
 
     ``vertex_counts`` participates in the key so that regenerating the FreeSurfer
     surfaces invalidates a cached ROI pack whose indices describe the old surface.
+
+    With the Wang atlas, a digest of its label table is part of the key too, so
+    a pack built with an older (wrong) table is rebuilt instead of reused.
     """
     meta = {
         "sub": sub,
@@ -128,6 +131,8 @@ def _canonical_meta(
     }
     if vertex_counts:
         meta["vertex_counts"] = {k: int(v) for k, v in sorted(vertex_counts.items())}
+    if ATLAS_WANG in meta["atlases"]:
+        meta["wang_labels"] = _meta_digest(_wang_labels())
     return meta
 
 
@@ -508,6 +513,13 @@ def _wang_labels() -> dict:
     """
     Get Wang et al. (2015) visual area labels mapping.
 
+    The values are those of wang15_mplbl.mgz, i.e. the ROI order of the atlas'
+    ROIfiles_Labeling.txt. Note 12-17 run from lateral-anterior to dorsal
+    (TO2 ... V3a), not in the usual V3a, V3b, LO1, LO2, TO1, TO2 order: until
+    8.1 they were listed that way, which swapped V3a/TO2, V3b/TO1 and LO1/LO2.
+    Checked on fsaverage: 17 borders V3d and IPS0 (V3a), 15 borders V3d (LO1),
+    12 is the most anterior lateral patch and borders only 13 (TO2).
+
     Returns
     -------
     dict
@@ -526,12 +538,12 @@ def _wang_labels() -> dict:
         "VO2",
         "PHC1",
         "PHC2",
-        "V3a",
-        "V3b",
-        "LO1",
-        "LO2",
-        "TO1",
-        "TO2",
+        "TO2",  # 12, MST
+        "TO1",  # 13, hMT
+        "LO2",  # 14
+        "LO1",  # 15
+        "V3b",  # 16
+        "V3a",  # 17
         "IPS0",
         "IPS1",
         "IPS2",
