@@ -1,6 +1,8 @@
 # roi_pack.py
 
+import functools
 import hashlib
+import itertools
 import json
 import os
 import subprocess
@@ -9,10 +11,8 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 import h5py
-import neuropythy as ny
 import nibabel as nib
 import numpy as np
-from nilearn.image import resample_to_img
 from prfprepare_logging import get_logger
 from roipack import RoiPack
 
@@ -563,8 +563,12 @@ def _benson_labels(hemi: str) -> dict:
     RuntimeError
         If neuropythy is not available.
     """
-    if ny is None:
-        raise RuntimeError("neuropythy is required to derive Benson labels")
+    # Imported here: neuropythy takes seconds to import and is only needed
+    # when a pack is built
+    try:
+        import neuropythy as ny
+    except ImportError as e:
+        raise RuntimeError("neuropythy is required to derive Benson labels") from e
     mdl = ny.vision.retinotopy_model("benson17", f"{hemi}h")
     areaLabels = dict(mdl.area_id_to_name)  # id -> name
     return {areaLabels[k]: k for k in areaLabels}  # name -> id
@@ -651,6 +655,17 @@ def _surface_subject_dir(
     return fs_dir / "fsaverage"
 
 
+@functools.lru_cache(maxsize=None)
+def _read_geometry_vertex_count(path: str, mtime_ns: int) -> int:
+    """Vertex count of a surface file, cached per (path, mtime).
+
+    Validation runs for every run and hemisphere, so without the cache the
+    same surfaces are read from disk over and over.
+    """
+    coords, _ = nib.freesurfer.read_geometry(path)
+    return int(coords.shape[0])
+
+
 def _geometry_vertex_count(sub_dir: Path, hemi: str) -> tuple[int, Path]:
     """Vertex count from FreeSurfer surface geometry (the authoritative source)."""
     tried = []
@@ -658,8 +673,8 @@ def _geometry_vertex_count(sub_dir: Path, hemi: str) -> tuple[int, Path]:
         path = sub_dir / "surf" / f"{hemi}h.{surf}"
         tried.append(path)
         if path.exists():
-            coords, _ = nib.freesurfer.read_geometry(str(path))
-            return int(coords.shape[0]), path
+            n = _read_geometry_vertex_count(str(path), path.stat().st_mtime_ns)
+            return n, path
 
     raise AtlasNotFoundError(
         f"No FreeSurfer surface geometry found for hemisphere {hemi}. Tried: "
@@ -676,8 +691,10 @@ def _atlas_vertex_count(path: Path) -> int:
     (n_areas, vertices) -- one probability map per visual area. Taking the largest
     axis reads the vertex count from either, since the number of visual areas is
     orders of magnitude smaller than the number of vertices.
+
+    The shape is read from the header, without decompressing the data.
     """
-    shape = nib.load(str(path)).get_fdata().squeeze().shape
+    shape = tuple(d for d in nib.load(str(path)).shape if d != 1)
     return int(max(shape))
 
 
@@ -1031,36 +1048,54 @@ def _same_grid(img, bold_img, atol=1e-5) -> bool:
     )
 
 
-def _resample_images_to_bold(atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_img):
-    """Resample atlas and ribbon images to BOLD space if needed."""
-    # Resample atlas volume
-    if not _same_grid(atlas_vol_img, bold_img):
-        atlas_vol_img = resample_to_img(
-            atlas_vol_img,
-            bold_img,
-            interpolation="nearest",
-            force_resample=True,
+def _resample_to_bold(img, bold_img):
+    """Resample img to the BOLD grid (nearest neighbour) if it is not on it."""
+    if _same_grid(img, bold_img):
+        return img
+    from nilearn.image import resample_to_img
+
+    return resample_to_img(
+        img,
+        bold_img,
+        interpolation="nearest",
+        force_resample=True,
+    )
+
+
+def _ribbons_on_grid(sub_dir: Path, sub: str, bold_img, resample: bool, cache=None):
+    """Cortical ribbons and the left-hemisphere territory on the BOLD grid.
+
+    The same for every atlas of a grid, so with a ``cache`` dict they are
+    computed once (resampling and two full-volume EDTs) and then reused.
+
+    Returns
+    -------
+    tuple
+        (lh_ribbon, rh_ribbon, left) boolean arrays.
+    """
+    if cache is not None and "ribbons" in cache:
+        return cache["ribbons"]
+
+    lh_ribbon_path = sub_dir / "mri" / "lh.ribbon.mgz"
+    rh_ribbon_path = sub_dir / "mri" / "rh.ribbon.mgz"
+
+    if not (lh_ribbon_path.exists() and rh_ribbon_path.exists()):
+        raise AtlasNotFoundError(
+            f"Missing cortical ribbon files for subject {sub}: {lh_ribbon_path}, {rh_ribbon_path}"
         )
 
-    # Resample left hemisphere ribbon
-    if not _same_grid(lh_ribbon_img, bold_img):
-        lh_ribbon_img = resample_to_img(
-            lh_ribbon_img,
-            bold_img,
-            interpolation="nearest",
-            force_resample=True,
-        )
+    lh_ribbon_img = nib.load(str(lh_ribbon_path))
+    rh_ribbon_img = nib.load(str(rh_ribbon_path))
+    if resample and bold_img is not None:
+        lh_ribbon_img = _resample_to_bold(lh_ribbon_img, bold_img)
+        rh_ribbon_img = _resample_to_bold(rh_ribbon_img, bold_img)
 
-    # Resample right hemisphere ribbon
-    if not _same_grid(rh_ribbon_img, bold_img):
-        rh_ribbon_img = resample_to_img(
-            rh_ribbon_img,
-            bold_img,
-            interpolation="nearest",
-            force_resample=True,
-        )
-
-    return atlas_vol_img, lh_ribbon_img, rh_ribbon_img
+    lh_ribbon = lh_ribbon_img.get_fdata().astype(bool)
+    rh_ribbon = rh_ribbon_img.get_fdata().astype(bool)
+    ribbons = (lh_ribbon, rh_ribbon, _left_hemisphere_territory(lh_ribbon, rh_ribbon))
+    if cache is not None:
+        cache["ribbons"] = ribbons
+    return ribbons
 
 
 def _dilate_atlas_with_distance_assignment(atlas_base, unique_labels):
@@ -1078,36 +1113,31 @@ def _dilate_atlas_with_distance_assignment(atlas_base, unique_labels):
     np.ndarray
         Dilated atlas with disputed voxels assigned to nearest label
     """
-    from scipy.ndimage import binary_dilation, distance_transform_edt
-
     atlas = np.copy(atlas_base)
     if len(unique_labels) == 0:
         return atlas
 
-    # Create union of all dilated masks to find disputed territory
-    union_dilated = np.zeros_like(atlas_base, dtype=bool)
-    for label in unique_labels:
-        label_mask = atlas_base == label
-        dilated_mask = binary_dilation(label_mask, structure=np.ones((3, 3, 3)))
-        union_dilated |= dilated_mask
+    # A voxel reached by the 3x3x3 dilation lies within sqrt(3) of a labelled
+    # voxel, so its nearest label is always among its 26 neighbours. Walk the
+    # neighbour shells from near to far (squared distance 1, 2, 3) and take
+    # the first shell holding a label; within a shell the lowest label wins.
+    # Same result as a distance transform per label, at a fraction of the cost.
+    labels = np.where(np.isin(atlas_base, unique_labels), atlas_base, np.inf)
+    padded = np.pad(labels, 1, constant_values=np.inf)
+    offsets = [o for o in itertools.product((-1, 0, 1), repeat=3) if any(o)]
 
-    # Find voxels that need assignment (in union but not in original)
-    to_assign = union_dilated & (atlas_base == 0)
-
-    if np.any(to_assign):
-        # For each label, compute distance transform from original mask
-        min_distances = np.full(atlas_base.shape, np.inf)
-        nearest_labels = np.zeros_like(atlas_base)
-
-        for label in unique_labels:
-            label_mask = atlas_base == label
-            distances = distance_transform_edt(~label_mask)
-            closer = distances < min_distances
-            min_distances[closer] = distances[closer]
-            nearest_labels[closer] = label
-
-        # Assign disputed voxels to nearest label
-        atlas[to_assign] = nearest_labels[to_assign]
+    unassigned = atlas_base == 0
+    for d2 in (1, 2, 3):
+        nearest = np.full(atlas_base.shape, np.inf)
+        for o in offsets:
+            if sum(v * v for v in o) == d2:
+                shifted = tuple(
+                    slice(1 + v, 1 + v + n) for v, n in zip(o, atlas_base.shape)
+                )
+                np.minimum(nearest, padded[shifted], out=nearest)
+        hit = unassigned & np.isfinite(nearest)
+        atlas[hit] = nearest[hit]
+        unassigned &= ~hit
 
     return atlas
 
@@ -1144,8 +1174,13 @@ def _create_volume_roi_masks(
     atlas,
     rois,
     dilate=True,
+    left=None,
 ):
-    """Create volume ROI masks for both hemispheres."""
+    """Create volume ROI masks for both hemispheres.
+
+    ``left`` is the left-hemisphere territory of the grid; computed from the
+    ribbons when not given.
+    """
     if dilate:
         atlas_l_base = atlas_vol * lh_ribbon.astype(atlas_vol.dtype)
         atlas_r_base = atlas_vol * rh_ribbon.astype(atlas_vol.dtype)
@@ -1167,7 +1202,8 @@ def _create_volume_roi_masks(
     # which then lands in both hemispheres' masked spaces and is fitted twice.
     # Give every voxel to the hemisphere whose cortical ribbon is closer (ties
     # go left). Being one map per grid, it splits all atlases the same way.
-    left = _left_hemisphere_territory(lh_ribbon, rh_ribbon)
+    if left is None:
+        left = _left_hemisphere_territory(lh_ribbon, rh_ribbon)
     atlas_l = np.where(left, atlas_l, 0)
     atlas_r = np.where(left, 0, atlas_r)
 
@@ -1210,53 +1246,32 @@ def _volume_masks_for_atlas(
     dilate: bool = True,
     nifti_custom_atlases: Optional[list] = None,
     sess: str | None = None,
+    grid_cache: Optional[dict] = None,
 ) -> dict:
     """
     Return dict of boolean 3D masks in T1w space keyed by (hemi, atlas, roi),
     or ('both','full_brain','full_brain') for volume-wide masks.
+
+    ``grid_cache`` is a dict shared across the atlases of one grid, so the
+    ribbons and hemisphere territory are computed only once per grid.
     """
     fs_dir = Path(fs_dir)
     sub_dir = _resolve_fs_subject_dir(fs_dir, sub, sess)
 
-    # Load cortical ribbon files
-    lh_ribbon_path = sub_dir / "mri" / "lh.ribbon.mgz"
-    rh_ribbon_path = sub_dir / "mri" / "rh.ribbon.mgz"
+    if resample and isinstance(bold_img, (str, Path)):
+        bold_img = nib.load(str(bold_img))
 
-    if not (lh_ribbon_path.exists() and rh_ribbon_path.exists()):
-        raise AtlasNotFoundError(
-            f"Missing cortical ribbon files for subject {sub}: {lh_ribbon_path}, {rh_ribbon_path}"
-        )
-
-    lh_ribbon_img = nib.load(str(lh_ribbon_path))
-    rh_ribbon_img = nib.load(str(rh_ribbon_path))
+    # Ribbons on the BOLD grid, so the flat indices are in BOLD voxel order and
+    # stay shape-consistent across atlases in the union (otherwise
+    # apply_masks_to_run indexes the wrong grid and _write_union_membership
+    # raises GridMismatchError).
+    lh_ribbon, rh_ribbon, left = _ribbons_on_grid(
+        sub_dir, sub, bold_img, resample, cache=grid_cache
+    )
 
     if atlas == ATLAS_FULLBRAIN:
-        # Resample the ribbon to the BOLD grid so the flat indices are in BOLD
-        # voxel order and stay shape-consistent with wang/benson masks in the
-        # union (otherwise apply_masks_to_run indexes the wrong grid and
-        # _write_union_membership raises GridMismatchError).
-        if resample and bold_img is not None:
-            if isinstance(bold_img, (str, Path)):
-                bold_img = nib.load(str(bold_img))
-            if not _same_grid(lh_ribbon_img, bold_img):
-                lh_ribbon_img = resample_to_img(
-                    lh_ribbon_img,
-                    bold_img,
-                    interpolation="nearest",
-                    force_resample=True,
-                )
-            if not _same_grid(rh_ribbon_img, bold_img):
-                rh_ribbon_img = resample_to_img(
-                    rh_ribbon_img,
-                    bold_img,
-                    interpolation="nearest",
-                    force_resample=True,
-                )
-        lh_ribbon = lh_ribbon_img.get_fdata().astype(bool)
-        rh_ribbon = rh_ribbon_img.get_fdata().astype(bool)
         # FreeSurfer's two ribbons overlap at the medial wall, so split them the
-        # same way as the atlases: each voxel to one hemisphere only
-        left = _left_hemisphere_territory(lh_ribbon, rh_ribbon)
+        # same way as the atlases: each voxel to one hemisphere only.
         # Store separate per-hemi full_brain masks for per-hemi unions
         return {
             (HEMI_LEFT, ATLAS_FULLBRAIN, ATLAS_FULLBRAIN): lh_ribbon & left,
@@ -1306,18 +1321,20 @@ def _volume_masks_for_atlas(
 
     # Resample to BOLD space if requested
     if resample and bold_img is not None:
-        if isinstance(bold_img, (str, Path)):
-            bold_img = nib.load(str(bold_img))
-        atlas_vol_img, lh_ribbon_img, rh_ribbon_img = _resample_images_to_bold(
-            atlas_vol_img, lh_ribbon_img, rh_ribbon_img, bold_img
-        )
+        atlas_vol_img = _resample_to_bold(atlas_vol_img, bold_img)
 
     atlas_vol = atlas_vol_img.get_fdata()
-    lh_ribbon = lh_ribbon_img.get_fdata().astype(bool)
-    rh_ribbon = rh_ribbon_img.get_fdata().astype(bool)
 
     return _create_volume_roi_masks(
-        atlas_vol, lh_ribbon, rh_ribbon, labels_l, labels_r, atlas, rois, dilate
+        atlas_vol,
+        lh_ribbon,
+        rh_ribbon,
+        labels_l,
+        labels_r,
+        atlas,
+        rois,
+        dilate,
+        left=left,
     )
 
 
@@ -1336,12 +1353,17 @@ def _run_neuropythy(
     Ensure Neuropythy outputs exist for subject (and fsaverage if needed),
     and project custom fsaverage annot files to subject space. Idempotent.
     """
-    try:
-        from neuropythy.commands import atlas
-    except ImportError as e:
-        raise RuntimeError(
-            "Neuropythy is required for ROI generation but is not installed."
-        ) from e
+
+    def _atlas_command():
+        # Imported only when atlases must be generated: neuropythy takes
+        # seconds to import
+        try:
+            from neuropythy.commands import atlas
+        except ImportError as e:
+            raise RuntimeError(
+                "Neuropythy is required for ROI generation but is not installed."
+            ) from e
+        return atlas
 
     fs_dir = Path(fs_dir)
     subject = _resolve_fs_subject_dir(fs_dir, sub, ses).name
@@ -1354,6 +1376,7 @@ def _run_neuropythy(
         LOG.debug(f"Neuropythy: generating Benson maps for {subject}...")
         try:
             cwd_prev = Path.cwd()
+            atlas = _atlas_command()
             os.chdir(fs_dir)
             atlas.main(subject, "-v", "-S")
             os.chdir(cwd_prev)
@@ -1401,6 +1424,7 @@ def _run_neuropythy(
             LOG.debug(f"Neuropythy: generating atlases for fsaverage...")
             try:
                 cwd_prev = Path.cwd()
+                atlas = _atlas_command()
                 os.chdir(fs_dir)
                 atlas.main("fsaverage", "-v")
                 os.chdir(cwd_prev)
@@ -1438,6 +1462,10 @@ def prepare_roi_pack(
     )
     force = ctx.get("force")
     store_as_indices = bool(ctx.get("store_as_indices", False))
+    # Set by parallel masking jobs: the pack was prepared beforehand, so this
+    # call may only read it. Building here would write the HDF5 while other
+    # jobs read it.
+    read_only = bool(ctx.get("roi_pack_read_only", False))
 
     # Validate inputs
     _validate_inputs(analysis_space, atlases, rois)
@@ -1519,6 +1547,13 @@ def prepare_roi_pack(
         else:
             _write_meta(meta_path, meta)
 
+    if read_only and analysis_space in (SPACE_FSNATIVE, SPACE_FSAVERAGE):
+        raise RuntimeError(
+            f"ROI pack {h5_path} is not up to date for this run, but it may not "
+            "be rebuilt from a parallel masking job (inputs changed since it was "
+            "prepared?). Re-run prfprepare."
+        )
+
     # Compute ROI masks
     roi_masks = {}
     atlases = list(atlases or [])
@@ -1577,7 +1612,14 @@ def prepare_roi_pack(
                 if f.get(f"/{base_group}/original_space") is not None:
                     return RoiPack(key, h5_path, meta)
 
+        if read_only:
+            raise RuntimeError(
+                f"Grid {gid} is missing from ROI pack {h5_path}, but it may not "
+                "be built from a parallel masking job. Re-run prfprepare."
+            )
+
         # build ROI masks for this grid
+        grid_cache = {}
         for atlas in atlases:
             # Allow custom nifti atlases in volume space
             is_custom_nifti = nifti_custom_atlases and atlas in [
@@ -1598,6 +1640,7 @@ def prepare_roi_pack(
                     bold_img=bimg,
                     nifti_custom_atlases=nifti_custom_atlases,
                     sess=ses,
+                    grid_cache=grid_cache,
                 )
             )
         # write grid metadata and masks under the grid group with a lightweight lock
